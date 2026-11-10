@@ -1,8 +1,19 @@
 import * as XLSX from 'xlsx';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  deleteDoc,
+  serverTimestamp,
+} from 'firebase/firestore';
+import { db, auth, syncFirebaseEmailAuth } from '../firebase';
 import { KodeSipdItem, OPD } from '../types/oppkpke';
 
 // Data awal Kode SIPD di-0-kan (kosong) sampai pengguna melampirkan / mengunggah CSV baru
 const SIPD_CSV_URLS: string[] = [];
+const SIPD_CHUNK_SIZE = 200;
 
 const LEGACY_SIPD_KEYS = [
   'e_oppkpke_blora_sipd_uploaded_master_v1',
@@ -282,6 +293,124 @@ function applyLocalOverrides(baseRows: KodeSipdItem[]): KodeSipdItem[] {
   return [...validCustom, ...mergedBase];
 }
 
+async function ensureSipdAuth(): Promise<void> {
+  if (auth.currentUser) return;
+  try {
+    await syncFirebaseEmailAuth('admin@oppkpke.com', 'admin');
+  } catch {
+    // ignore auth errors
+  }
+}
+
+async function syncSipdMasterToFirestore(
+  items: KodeSipdItem[],
+  meta: {
+    fileName: string;
+    totalRawRows: number;
+    uniqueCount: number;
+    uploadedAt: string;
+  } | null
+): Promise<void> {
+  try {
+    await ensureSipdAuth();
+    const totalChunks = Math.ceil(items.length / SIPD_CHUNK_SIZE);
+
+    const existingChunksSnap = await getDocs(collection(db, 'sipd_chunks'));
+    const deletions: Promise<void>[] = [];
+    existingChunksSnap.forEach((d) => {
+      const idx = Number(d.id.replace('chunk_', ''));
+      if (Number.isNaN(idx) || idx >= totalChunks) {
+        deletions.push(deleteDoc(doc(db, 'sipd_chunks', d.id)));
+      }
+    });
+    if (deletions.length > 0) {
+      await Promise.allSettled(deletions);
+    }
+
+    const chunkWrites: Promise<void>[] = [];
+    for (let c = 0; c < totalChunks; c++) {
+      const slice = items.slice(c * SIPD_CHUNK_SIZE, (c + 1) * SIPD_CHUNK_SIZE);
+      chunkWrites.push(
+        setDoc(doc(db, 'sipd_chunks', `chunk_${c}`), {
+          chunkIndex: c,
+          items: slice,
+          updatedAt: serverTimestamp(),
+        })
+      );
+    }
+    if (chunkWrites.length > 0) {
+      await Promise.allSettled(chunkWrites);
+    }
+
+    await setDoc(doc(db, 'sipd_meta', 'master'), {
+      fileName: meta?.fileName || 'Master_SIPD_Cloud.csv',
+      totalRawRows: meta?.totalRawRows ?? items.length,
+      uniqueCount: items.length,
+      chunkCount: totalChunks,
+      uploadedAt: meta?.uploadedAt || new Date().toISOString(),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (err) {
+    console.warn('Gagal menyinkronkan Kode SIPD ke Cloud Firestore:', err);
+  }
+}
+
+async function pullSipdMasterFromFirestore(): Promise<KodeSipdItem[] | null> {
+  try {
+    await ensureSipdAuth();
+    const metaSnap = await getDoc(doc(db, 'sipd_meta', 'master'));
+    if (!metaSnap.exists()) return null;
+
+    const metaData = metaSnap.data();
+    const chunkCount = Number(metaData.chunkCount) || 0;
+    const remoteUploadedAt = String(metaData.uploadedAt || '');
+    const remoteUniqueCount = Number(metaData.uniqueCount) || 0;
+
+    if (chunkCount === 0 || remoteUniqueCount === 0) {
+      return [];
+    }
+
+    const localMeta = getUploadedSipdMeta();
+    const localMaster = getUploadedMasterItems();
+    if (
+      localMaster &&
+      localMeta &&
+      localMeta.uploadedAt === remoteUploadedAt &&
+      localMaster.length === remoteUniqueCount
+    ) {
+      return localMaster;
+    }
+
+    const chunksSnap = await getDocs(collection(db, 'sipd_chunks'));
+    if (chunksSnap.empty) return null;
+
+    const sortedChunks = chunksSnap.docs
+      .map((d) => d.data() as { chunkIndex?: number; items?: KodeSipdItem[] })
+      .sort((a, b) => (Number(a.chunkIndex) || 0) - (Number(b.chunkIndex) || 0));
+
+    const combined: KodeSipdItem[] = [];
+    sortedChunks.forEach((ch) => {
+      if (Array.isArray(ch.items)) {
+        combined.push(...ch.items);
+      }
+    });
+
+    if (combined.length > 0) {
+      saveUploadedMasterItems(combined, {
+        fileName: String(metaData.fileName || 'Kode_SIPD_Firestore.csv'),
+        totalRawRows: Number(metaData.totalRawRows) || combined.length,
+        uniqueCount: combined.length,
+        uploadedAt: remoteUploadedAt || new Date().toISOString(),
+      });
+    }
+
+    return combined;
+  } catch (err) {
+    console.warn('Gagal menarik Kode SIPD dari Cloud Firestore:', err);
+    return null;
+  }
+}
+
 function parse2DRowsIntoSipdDataset(
   rawRows: string[][],
   idPrefix = 'sipd'
@@ -382,10 +511,22 @@ export class SipdService {
   }> {
     const uploadedMaster = getUploadedMasterItems();
     if (uploadedMaster) {
+      // Periksa pembaruan terbaru di Firestore di latar belakang
+      void pullSipdMasterFromFirestore();
       const merged = applyLocalOverrides(uploadedMaster);
       return {
         uniqueRows: merged,
         allRows: cachedAllCsvRows ? applyLocalOverrides(cachedAllCsvRows) : merged,
+      };
+    }
+
+    // Tarik dari Cloud Firestore apabila localStorage di perangkat/Vercel masih kosong
+    const remoteMaster = await pullSipdMasterFromFirestore();
+    if (remoteMaster && remoteMaster.length > 0) {
+      const merged = applyLocalOverrides(remoteMaster);
+      return {
+        uniqueRows: merged,
+        allRows: merged,
       };
     }
 
@@ -495,6 +636,9 @@ export class SipdService {
       saveCustomSipdItems([cleanItem, ...customList]);
     }
 
+    const currentMerged = applyLocalOverrides(getUploadedMasterItems() || []);
+    void syncSipdMasterToFirestore(currentMerged, getUploadedSipdMeta());
+
     return cleanItem;
   }
 
@@ -510,10 +654,13 @@ export class SipdService {
     const deletedIds = getDeletedSipdIds();
     deletedIds.add(sipdId);
     saveDeletedSipdIds(deletedIds);
+
+    const currentMerged = applyLocalOverrides(getUploadedMasterItems() || []);
+    void syncSipdMasterToFirestore(currentMerged, getUploadedSipdMeta());
   }
 
   /**
-   * Reset seluruh perubahan kustom ke data asli CSV kode_sipd_ok
+   * Reset seluruh perubahan kustom ke data 0
    */
   static resetCustomChanges(): void {
     localStorage.removeItem(SIPD_STORAGE_KEYS.UPLOADED_MASTER);
@@ -523,6 +670,7 @@ export class SipdService {
     localStorage.removeItem(SIPD_STORAGE_KEYS.DELETED_IDS);
     cachedAllCsvRows = null;
     cachedUniqueCsvRows = null;
+    void syncSipdMasterToFirestore([], null);
   }
 
   /**
@@ -583,16 +731,20 @@ export class SipdService {
       localStorage.removeItem(SIPD_STORAGE_KEYS.CUSTOM_ITEMS);
       localStorage.removeItem(SIPD_STORAGE_KEYS.EDITED_MAP);
       localStorage.removeItem(SIPD_STORAGE_KEYS.DELETED_IDS);
-      saveUploadedMasterItems(uniqueParsed, {
+      const newMeta = {
         fileName: file.name,
         totalRawRows: allParsed.length,
         uniqueCount: uniqueParsed.length,
         uploadedAt: new Date().toISOString(),
-      });
+      };
+      saveUploadedMasterItems(uniqueParsed, newMeta);
+      void syncSipdMasterToFirestore(uniqueParsed, newMeta);
     } else {
       const customList = getCustomSipdItems();
       const markedCustom = uniqueParsed.map((item) => ({ ...item, is_custom: true }));
       saveCustomSipdItems([...markedCustom, ...customList]);
+      const currentMerged = applyLocalOverrides(getUploadedMasterItems() || []);
+      void syncSipdMasterToFirestore(currentMerged, getUploadedSipdMeta());
     }
 
     return {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Lock,
@@ -12,6 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import { AuthUser } from '../types/oppkpke';
+import { DatabaseService } from '../services/databaseService';
 import { BloraShieldLogo } from './ui/BloraVisuals';
 
 interface LoginViewProps {
@@ -32,13 +33,27 @@ export const LoginView: React.FC<LoginViewProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showForgotInfo, setShowForgotInfo] = useState(false);
+  const [isCheckingCloud, setIsCheckingCloud] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    void DatabaseService.pullAllFromFirestore();
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
     const res = onLoginCredentials(username, password);
-    if (!res.success) {
-      setErrorMsg(res.message);
+    if (res.success) return;
+
+    setIsCheckingCloud(true);
+    try {
+      await DatabaseService.pullAllFromFirestore();
+      const retryRes = onLoginCredentials(username, password);
+      if (!retryRes.success) {
+        setErrorMsg(retryRes.message);
+      }
+    } finally {
+      setIsCheckingCloud(false);
     }
   };
 
@@ -213,10 +228,11 @@ export const LoginView: React.FC<LoginViewProps> = ({
               <div className="pt-2">
                 <button
                   type="submit"
-                  className="w-full py-3.5 px-6 rounded-full bg-gradient-to-r from-[#0066FF] via-[#0052FF] to-[#0040D9] hover:from-[#0055E6] hover:to-[#0035B8] text-white text-sm font-bold shadow-[0_10px_25px_-5px_rgba(0,82,255,0.65)] flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  disabled={isCheckingCloud}
+                  className="w-full py-3.5 px-6 rounded-full bg-gradient-to-r from-[#0066FF] via-[#0052FF] to-[#0040D9] hover:from-[#0055E6] hover:to-[#0035B8] disabled:opacity-70 text-white text-sm font-bold shadow-[0_10px_25px_-5px_rgba(0,82,255,0.65)] flex items-center justify-center gap-2 transition-all cursor-pointer"
                 >
                   <LogIn className="w-4 h-4 stroke-[2.5]" />
-                  <span>Masuk</span>
+                  <span>{isCheckingCloud ? 'Menyinkronkan Cloud...' : 'Masuk'}</span>
                 </button>
               </div>
             </form>

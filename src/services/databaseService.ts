@@ -62,14 +62,6 @@ if (typeof window !== 'undefined') {
       'e_oppkpke_blora_realisasi_v3',
       'e_oppkpke_blora_audit_v3',
     ].forEach((legacyKey) => localStorage.removeItem(legacyKey));
-
-    const rawSession = localStorage.getItem(STORAGE_KEYS.SESSION_USER);
-    if (rawSession) {
-      const parsed = JSON.parse(rawSession) as AuthUser;
-      if (parsed?.role !== 'ADMIN') {
-        localStorage.removeItem(STORAGE_KEYS.SESSION_USER);
-      }
-    }
   } catch {
     // ignore storage cleanup errors
   }
@@ -136,21 +128,12 @@ async function ensureFirebaseAuth(): Promise<User | null> {
 
   pendingAuthPromise = (async () => {
     try {
-      let email = 'admin@oppkpke.com';
-      let password = 'admin';
-      try {
-        const rawSession = localStorage.getItem(STORAGE_KEYS.SESSION_USER);
-        if (rawSession) {
-          const parsed = JSON.parse(rawSession) as AuthUser;
-          if (parsed?.username) {
-            email = formatOpdEmail(parsed.email || parsed.username);
-            password = parsed.password_hint || 'lamis123';
-          }
-        }
-      } catch {
-        // use default admin credentials
-      }
+      // Gunakan kredensial sinkronisasi utama agar seluruh dokumen memiliki akses bersama lintas perangkat/Vercel
+      const email = 'admin@oppkpke.com';
+      const password = 'admin';
       return await syncFirebaseEmailAuth(email, password);
+    } catch {
+      return auth.currentUser;
     } finally {
       pendingAuthPromise = null;
     }
@@ -424,11 +407,210 @@ export class DatabaseService {
   }
 
   /**
+   * Tarik (pull) seluruh koleksi dari Cloud Firestore ke penyimpanan lokal browser (penting untuk Vercel / perangkat baru)
+   */
+  static async pullAllFromFirestore(): Promise<boolean> {
+    try {
+      await ensureFirebaseAuth();
+      const [
+        periodesSnap,
+        opdsSnap,
+        usersSnap,
+        matricesSnap,
+        realisasisSnap,
+        auditSnap,
+      ] = await Promise.all([
+        getDocs(collection(db, 'periodes')),
+        getDocs(collection(db, 'opds')),
+        getDocs(collection(db, 'user_accounts')),
+        getDocs(collection(db, 'matrices')),
+        getDocs(collection(db, 'realisasis')),
+        getDocs(collection(db, 'audit_logs')),
+      ]);
+
+      if (!periodesSnap.empty) {
+        const items: PeriodePelaporan[] = periodesSnap.docs
+          .map((d) => {
+            const data = d.data();
+            return {
+              periode_id: String(data.periode_id || d.id),
+              tahun: Number(data.tahun) || 2026,
+              nama_periode: String(data.nama_periode || ''),
+              semester_1_buka: Boolean(data.semester_1_buka),
+              semester_2_buka: Boolean(data.semester_2_buka),
+              batas_semester_1: String(data.batas_semester_1 || ''),
+              batas_semester_2: String(data.batas_semester_2 || ''),
+              is_active: Boolean(data.is_active),
+              updated_at: new Date().toISOString(),
+            };
+          })
+          .sort((a, b) => a.tahun - b.tahun);
+        saveTable(STORAGE_KEYS.PERIODE, items, true);
+      }
+
+      if (!opdsSnap.empty || !opdsSnap.metadata.fromCache) {
+        const items: OPD[] = opdsSnap.docs.map((d) => {
+          const data = d.data();
+          return {
+            opd_id: String(data.opd_id || d.id),
+            kode_opd: String(data.kode_opd || '1.00.01'),
+            nama_opd: String(data.nama_opd || ''),
+            singkatan: String(data.singkatan || ''),
+            kategori: (data.kategori as InstansiKategori) || 'OPD/Dinas/Badan',
+            kepala_opd: String(data.kepala_opd || ''),
+          };
+        });
+        saveTable(STORAGE_KEYS.OPD, items, true);
+      }
+
+      if (!usersSnap.empty) {
+        const items: AuthUser[] = usersSnap.docs.map((d) => {
+          const data = d.data();
+          const uname = String(data.username || '');
+          return {
+            user_id: String(data.user_id || d.id),
+            username: uname,
+            email: formatOpdEmail(String(data.email || uname)),
+            password_hint: String(data.password_hint || ''),
+            role: (data.role as UserRole) || 'OPD',
+            opd_id: data.opd_id ? String(data.opd_id) : null,
+            kategori: (data.kategori as InstansiKategori) || 'OPD/Dinas/Badan',
+            display_name: String(data.display_name || ''),
+            instansi_label: String(data.instansi_label || ''),
+            instansi_lengkap: String(data.instansi_lengkap || ''),
+            jabatan: String(data.jabatan || ''),
+          };
+        });
+        if (!items.some((u) => u.role === 'ADMIN')) {
+          items.unshift(SEED_USERS[0]);
+        }
+        saveTable(STORAGE_KEYS.USERS, items, true);
+      } else if (!usersSnap.metadata.fromCache && !hasTriggeredInitialCloudSeed) {
+        hasTriggeredInitialCloudSeed = true;
+        await this.syncAllLocalToFirestore();
+      }
+
+      if (!matricesSnap.empty || !matricesSnap.metadata.fromCache) {
+        const nowIso = new Date().toISOString();
+        const items: MatrixData[] = matricesSnap.docs.map((d) => {
+          const data = d.data();
+          return {
+            matrix_id: String(data.matrix_id || d.id),
+            periode_id: String(data.periode_id || 'per-2026'),
+            opd_id: String(data.opd_id || ''),
+            strategi: String(data.strategi || ''),
+            kode: String(data.kode || ''),
+            program: String(data.program || ''),
+            kegiatan: String(data.kegiatan || ''),
+            sub_kegiatan: String(data.sub_kegiatan || ''),
+            aktivitas_real_langsung: String(data.aktivitas_real_langsung || ''),
+            aktivitas_real_tidak_langsung: String(
+              data.aktivitas_real_tidak_langsung || ''
+            ),
+            aktivitas_real_penunjang: String(data.aktivitas_real_penunjang || ''),
+            alokasi_anggaran: Number(data.alokasi_anggaran) || 0,
+            sumber_pembiayaan: String(data.sumber_pembiayaan || 'APBD Kabupaten'),
+            sifat_bantuan:
+              data.sifat_bantuan === 'Tidak Berkelanjutan'
+                ? 'Tidak Berkelanjutan'
+                : 'Berkelanjutan',
+            lokasi: String(data.lokasi || ''),
+            lokasi_kecamatan: String(data.lokasi_kecamatan || ''),
+            lokasi_desa: String(data.lokasi_desa || ''),
+            lokasi_spesifik: String(data.lokasi_spesifik || ''),
+            jumlah_sasaran: Number(data.jumlah_sasaran) || 0,
+            satuan_sasaran: String(data.satuan_sasaran || 'KPM'),
+            keterangan_sasaran: String(data.keterangan_sasaran || ''),
+            besaran_manfaat: String(data.besaran_manfaat || ''),
+            jenis_bantuan: String(data.jenis_bantuan || 'Bantuan sosial'),
+            durasi_pemberian_bantuan: String(
+              data.durasi_pemberian_bantuan || '1 tahun'
+            ),
+            keterangan_durasi_bantuan: String(
+              data.keterangan_durasi_bantuan || ''
+            ),
+            created_at: nowIso,
+            updated_at: nowIso,
+          };
+        });
+        saveTable(STORAGE_KEYS.MATRIX, items, true);
+      }
+
+      if (!realisasisSnap.empty || !realisasisSnap.metadata.fromCache) {
+        const items: RealisasiSemester[] = realisasisSnap.docs.map((d) => {
+          const data = d.data();
+          return {
+            realisasi_id: String(data.realisasi_id || d.id),
+            matrix_id: String(data.matrix_id || ''),
+            semester: (Number(data.semester) === 2 ? 2 : 1) as SemesterNumber,
+            realisasi: Number(data.realisasi) || 0,
+            rincian_realisasi: String(data.rincian_realisasi || ''),
+            status_verifikasi:
+              (data.status_verifikasi as VerificationStatus) || 'Belum Diisi',
+            catatan_verifikator: String(data.catatan_verifikator || ''),
+            submitted_at: data.submitted_at ? String(data.submitted_at) : null,
+            verified_at: data.verified_at ? String(data.verified_at) : null,
+            verified_by: data.verified_by ? String(data.verified_by) : null,
+            updated_at: new Date().toISOString(),
+          };
+        });
+        saveTable(STORAGE_KEYS.REALISASI, items, true);
+      }
+
+      if (!auditSnap.empty || !auditSnap.metadata.fromCache) {
+        const items: AuditLog[] = auditSnap.docs
+          .map((d) => {
+            const data = d.data();
+            let createdIso = new Date().toISOString();
+            if (
+              data.createdAt &&
+              typeof (data.createdAt as { toDate?: () => Date }).toDate === 'function'
+            ) {
+              createdIso = (data.createdAt as { toDate: () => Date })
+                .toDate()
+                .toISOString();
+            } else if (typeof data.created_at === 'string') {
+              createdIso = data.created_at;
+            }
+            return {
+              log_id: String(data.log_id || d.id),
+              matrix_id: String(data.matrix_id || 'SYSTEM'),
+              semester:
+                data.semester === 1 || data.semester === 2
+                  ? (data.semester as SemesterNumber)
+                  : null,
+              opd_id: String(data.opd_id || 'ALL'),
+              user_role: (data.user_role as UserRole) || 'OPD',
+              user_name: String(data.user_name || 'Sistem'),
+              aksi: String(data.aksi || ''),
+              detail_perubahan: String(data.detail_perubahan || ''),
+              nilai_sebelumnya: data.nilai_sebelumnya
+                ? String(data.nilai_sebelumnya)
+                : undefined,
+              nilai_baru: data.nilai_baru ? String(data.nilai_baru) : undefined,
+              created_at: createdIso,
+            };
+          })
+          .sort((a, b) => b.created_at.localeCompare(a.created_at));
+        saveTable(STORAGE_KEYS.AUDIT, items, true);
+      }
+
+      this.setLastSyncTimestamp(new Date().toISOString());
+      notifyRealtimeChannel(STORAGE_KEYS.LAST_SYNC_AT);
+      return true;
+    } catch (err) {
+      console.warn('Gagal menarik data awal dari Cloud Firestore:', err);
+      return false;
+    }
+  }
+
+  /**
    * Berlangganan perubahan real-time dari Cloud Firestore (onSnapshot) lintas pengguna & perangkat
    */
   static subscribeToFirestore(onDataChanged: () => void): Unsubscribe {
     const unsubs: Unsubscribe[] = [];
     let isDisposed = false;
+    let snapshotsAttached = false;
 
     // Sinkronisasi instan antar-tab pada browser yang sama
     const handleStorageEvent = (e: StorageEvent) => {
@@ -450,7 +632,8 @@ export class DatabaseService {
     }
 
     const attachSnapshots = () => {
-      if (isDisposed) return;
+      if (isDisposed || snapshotsAttached) return;
+      snapshotsAttached = true;
 
       unsubs.push(
         onSnapshot(
@@ -476,9 +659,6 @@ export class DatabaseService {
               saveTable(STORAGE_KEYS.PERIODE, items, true);
               this.setLastSyncTimestamp(new Date().toISOString());
               onDataChanged();
-            } else if (!snap.metadata.fromCache && !hasTriggeredInitialCloudSeed) {
-              hasTriggeredInitialCloudSeed = true;
-              void this.syncAllLocalToFirestore();
             }
           },
           (err) => {
@@ -535,11 +715,11 @@ export class DatabaseService {
                   jabatan: String(data.jabatan || ''),
                 };
               });
+              if (!items.some((u) => u.role === 'ADMIN')) {
+                items.unshift(SEED_USERS[0]);
+              }
               saveTable(STORAGE_KEYS.USERS, items, true);
               onDataChanged();
-            } else if (!snap.metadata.fromCache && !hasTriggeredInitialCloudSeed) {
-              hasTriggeredInitialCloudSeed = true;
-              void this.syncAllLocalToFirestore();
             }
           },
           (err) => {
@@ -553,11 +733,6 @@ export class DatabaseService {
           collection(db, 'matrices'),
           (snap) => {
             if (!snap.empty || !snap.metadata.fromCache) {
-              if (snap.empty && !hasTriggeredInitialCloudSeed) {
-                hasTriggeredInitialCloudSeed = true;
-                void this.syncAllLocalToFirestore();
-                return;
-              }
               const items: MatrixData[] = snap.docs.map((d) => {
                 const data = d.data();
                 const nowIso = new Date().toISOString();
@@ -615,9 +790,6 @@ export class DatabaseService {
           collection(db, 'realisasis'),
           (snap) => {
             if (!snap.empty || !snap.metadata.fromCache) {
-              if (snap.empty && !hasTriggeredInitialCloudSeed) {
-                return;
-              }
               const items: RealisasiSemester[] = snap.docs.map((d) => {
                 const data = d.data();
                 return {
@@ -696,18 +868,11 @@ export class DatabaseService {
     };
 
     void ensureFirebaseAuth().then(async () => {
-      try {
-        const purgeFlag = 'e_oppkpke_blora_zero_opd_cloud_purge_optimis_97d75_v1';
-        if (typeof window !== 'undefined' && !localStorage.getItem(purgeFlag)) {
-          localStorage.setItem(purgeFlag, 'true');
-          await this.syncAllLocalToFirestore({ pruneRemoved: true });
-          await pruneFirestoreCollection('audit_logs', new Set());
-          await this.syncAllUsersToFirebaseAuth();
-        }
-      } catch {
-        // ignore cloud purge errors
+      await this.pullAllFromFirestore();
+      if (!isDisposed) {
+        onDataChanged();
+        attachSnapshots();
       }
-      attachSnapshots();
     });
 
     return () => {
