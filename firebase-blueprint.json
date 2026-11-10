@@ -1,0 +1,509 @@
+{
+  "entities": {
+    "PeriodePelaporan": {
+      "title": "PeriodePelaporan",
+      "description": "Periode tahun anggaran dan status buka/tutup semester pelaporan E-Lamis Blora",
+      "type": "object",
+      "properties": {
+        "periode_id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 64
+        },
+        "tahun": {
+          "type": "number"
+        },
+        "nama_periode": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "semester_1_buka": {
+          "type": "boolean"
+        },
+        "semester_2_buka": {
+          "type": "boolean"
+        },
+        "batas_semester_1": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "batas_semester_2": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "is_active": {
+          "type": "boolean"
+        },
+        "ownerId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "periode_id",
+        "tahun",
+        "nama_periode",
+        "semester_1_buka",
+        "semester_2_buka",
+        "is_active",
+        "ownerId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "OPD": {
+      "title": "OPD",
+      "description": "Data Perangkat Daerah / Instansi pada Kabupaten Blora",
+      "type": "object",
+      "properties": {
+        "opd_id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 64
+        },
+        "kode_opd": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "nama_opd": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "singkatan": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "kategori": {
+          "type": "string",
+          "enum": [
+            "Admin",
+            "OPD/Dinas/Badan",
+            "RSUD",
+            "Puskesmas",
+            "Kecamatan",
+            "Kelurahan"
+          ],
+          "maxLength": 40
+        },
+        "kepala_opd": {
+          "type": "string",
+          "maxLength": 150
+        },
+        "ownerId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "opd_id",
+        "kode_opd",
+        "nama_opd",
+        "singkatan",
+        "kategori",
+        "kepala_opd",
+        "ownerId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UserAccountPublic": {
+      "title": "UserAccountPublic",
+      "description": "Data akun instansi untuk manajemen user E-Lamis Blora",
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 64
+        },
+        "username": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 120
+        },
+        "password_hint": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "role": {
+          "type": "string",
+          "enum": ["ADMIN", "OPD"],
+          "maxLength": 16
+        },
+        "opd_id": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "kategori": {
+          "type": "string",
+          "enum": [
+            "Admin",
+            "OPD/Dinas/Badan",
+            "RSUD",
+            "Puskesmas",
+            "Kecamatan",
+            "Kelurahan"
+          ],
+          "maxLength": 40
+        },
+        "display_name": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "instansi_label": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "instansi_lengkap": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "jabatan": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "ownerId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "user_id",
+        "username",
+        "email",
+        "password_hint",
+        "role",
+        "kategori",
+        "display_name",
+        "instansi_label",
+        "instansi_lengkap",
+        "jabatan",
+        "ownerId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "MatrixData": {
+      "title": "MatrixData",
+      "description": "Data matriks program, kegiatan, dan subkegiatan penanggulangan kemiskinan Kabupaten Blora",
+      "type": "object",
+      "properties": {
+        "matrix_id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 64
+        },
+        "periode_id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 64
+        },
+        "opd_id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 64
+        },
+        "strategi": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "kode": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "program": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "kegiatan": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "sub_kegiatan": {
+          "type": "string",
+          "maxLength": 400
+        },
+        "aktivitas_real_langsung": {
+          "type": "string",
+          "maxLength": 1500
+        },
+        "aktivitas_real_tidak_langsung": {
+          "type": "string",
+          "maxLength": 1500
+        },
+        "aktivitas_real_penunjang": {
+          "type": "string",
+          "maxLength": 1500
+        },
+        "alokasi_anggaran": {
+          "type": "number"
+        },
+        "sumber_pembiayaan": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "sifat_bantuan": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "lokasi": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "jumlah_sasaran": {
+          "type": "number"
+        },
+        "satuan_sasaran": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "keterangan_sasaran": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "besaran_manfaat": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "jenis_bantuan": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "durasi_pemberian_bantuan": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "ownerId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "matrix_id",
+        "periode_id",
+        "opd_id",
+        "strategi",
+        "kode",
+        "program",
+        "kegiatan",
+        "sub_kegiatan",
+        "alokasi_anggaran",
+        "sumber_pembiayaan",
+        "sifat_bantuan",
+        "jumlah_sasaran",
+        "besaran_manfaat",
+        "jenis_bantuan",
+        "durasi_pemberian_bantuan",
+        "ownerId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "RealisasiSemester": {
+      "title": "RealisasiSemester",
+      "description": "Data realisasi anggaran dan status verifikasi Semester 1 dan Semester 2",
+      "type": "object",
+      "properties": {
+        "realisasi_id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 64
+        },
+        "matrix_id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 64
+        },
+        "semester": {
+          "type": "number"
+        },
+        "realisasi": {
+          "type": "number"
+        },
+        "status_verifikasi": {
+          "type": "string",
+          "enum": [
+            "Belum Diisi",
+            "Draft",
+            "Menunggu Verifikasi",
+            "Terverifikasi",
+            "Perlu Perbaikan"
+          ],
+          "maxLength": 32
+        },
+        "catatan_verifikator": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "ownerId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "realisasi_id",
+        "matrix_id",
+        "semester",
+        "realisasi",
+        "status_verifikasi",
+        "catatan_verifikator",
+        "ownerId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Riwayat dan log perubahan sistem E-Lamis Blora",
+      "type": "object",
+      "properties": {
+        "log_id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 64
+        },
+        "matrix_id": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "opd_id": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "user_role": {
+          "type": "string",
+          "enum": ["ADMIN", "OPD"],
+          "maxLength": 16
+        },
+        "user_name": {
+          "type": "string",
+          "maxLength": 150
+        },
+        "aksi": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "detail_perubahan": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "ownerId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "log_id",
+        "matrix_id",
+        "opd_id",
+        "user_role",
+        "user_name",
+        "aksi",
+        "detail_perubahan",
+        "ownerId",
+        "createdAt"
+      ]
+    },
+    "AdminRole": {
+      "title": "AdminRole",
+      "description": "Daftar UID administrator terverifikasi",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/admins/{adminUid}": {
+      "schema": { "$ref": "#/entities/AdminRole" },
+      "description": "Dokumen penanda hak akses Administrator E-Lamis Blora"
+    },
+    "/periodes/{periodeId}": {
+      "schema": { "$ref": "#/entities/PeriodePelaporan" },
+      "description": "Koleksi periode tahun anggaran (2026 & 2027)"
+    },
+    "/opds/{opdId}": {
+      "schema": { "$ref": "#/entities/OPD" },
+      "description": "Koleksi Perangkat Daerah dan Instansi Kabupaten Blora"
+    },
+    "/user_accounts/{userId}": {
+      "schema": { "$ref": "#/entities/UserAccountPublic" },
+      "description": "Koleksi akun manajemen user instansi per kategori"
+    },
+    "/matrices/{matrixId}": {
+      "schema": { "$ref": "#/entities/MatrixData" },
+      "description": "Koleksi baris data matriks program, kegiatan, dan subkegiatan"
+    },
+    "/realisasis/{realisasiId}": {
+      "schema": { "$ref": "#/entities/RealisasiSemester" },
+      "description": "Koleksi data realisasi Semester 1 dan Semester 2"
+    },
+    "/audit_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Koleksi riwayat audit log perubahan data"
+    }
+  }
+}

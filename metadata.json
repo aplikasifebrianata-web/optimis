@@ -1,0 +1,8 @@
+{
+  "name": "Remix E-OPPKPKE Kabupaten Blora",
+  "description": "Sistem Informasi Elektronik Optimalisasi Pelaksanaan Program Pengentasan Kemiskinan dan Penghapusan Kemiskinan Ekstrem (E-OPPKPKE) Pemerintah Kabupaten Blora.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

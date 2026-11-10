@@ -1,0 +1,353 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Default-Deny Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Core Primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        request.auth.token.email == 'aplikasifebrianata@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isOwnerOrAdmin() {
+      return isVerifiedUser() && (existing().ownerId == request.auth.uid || isAdmin());
+    }
+
+    // Validation Blueprints
+    function isValidAdminRole(data) {
+      return data.keys().hasAll(['uid', 'createdAt']) &&
+        data.keys().hasOnly(['uid', 'createdAt']) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+        data.uid == request.auth.uid &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidPeriode(data) {
+      return data.keys().hasAll([
+          'periode_id', 'tahun', 'nama_periode',
+          'semester_1_buka', 'semester_2_buka', 'is_active',
+          'ownerId', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'periode_id', 'tahun', 'nama_periode',
+          'semester_1_buka', 'semester_2_buka',
+          'batas_semester_1', 'batas_semester_2',
+          'is_active', 'ownerId', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.periode_id) &&
+        data.tahun is int && data.tahun >= 2020 && data.tahun <= 2100 &&
+        data.nama_periode is string && data.nama_periode.size() >= 1 && data.nama_periode.size() <= 120 &&
+        data.semester_1_buka is bool &&
+        data.semester_2_buka is bool &&
+        (!('batas_semester_1' in data) || (data.batas_semester_1 is string && data.batas_semester_1.size() <= 32)) &&
+        (!('batas_semester_2' in data) || (data.batas_semester_2 is string && data.batas_semester_2.size() <= 32)) &&
+        data.is_active is bool &&
+        data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 &&
+        data.ownerId == request.auth.uid &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidOPD(data) {
+      return data.keys().hasAll([
+          'opd_id', 'kode_opd', 'nama_opd', 'singkatan',
+          'kategori', 'kepala_opd', 'ownerId', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'opd_id', 'kode_opd', 'nama_opd', 'singkatan',
+          'kategori', 'kepala_opd', 'ownerId', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.opd_id) &&
+        data.kode_opd is string && data.kode_opd.size() >= 1 && data.kode_opd.size() <= 32 &&
+        data.nama_opd is string && data.nama_opd.size() >= 1 && data.nama_opd.size() <= 200 &&
+        data.singkatan is string && data.singkatan.size() >= 1 && data.singkatan.size() <= 64 &&
+        data.kategori in ['Admin', 'OPD/Dinas/Badan', 'RSUD', 'Puskesmas', 'Kecamatan', 'Kelurahan'] &&
+        data.kepala_opd is string && data.kepala_opd.size() <= 150 &&
+        data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 &&
+        data.ownerId == request.auth.uid &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidUserAccount(data) {
+      return data.keys().hasAll([
+          'user_id', 'username', 'email', 'password_hint', 'role', 'kategori',
+          'display_name', 'instansi_label', 'instansi_lengkap', 'jabatan',
+          'ownerId', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'user_id', 'username', 'email', 'password_hint', 'role', 'opd_id', 'kategori',
+          'display_name', 'instansi_label', 'instansi_lengkap', 'jabatan',
+          'ownerId', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.user_id) &&
+        data.username is string && data.username.size() >= 1 && data.username.size() <= 64 &&
+        data.email is string && data.email.size() >= 5 && data.email.size() <= 120 &&
+        data.password_hint is string && data.password_hint.size() >= 1 && data.password_hint.size() <= 64 &&
+        data.role in ['ADMIN', 'OPD'] &&
+        (!('opd_id' in data) || data.opd_id == null || (data.opd_id is string && data.opd_id.size() <= 64)) &&
+        data.kategori in ['Admin', 'OPD/Dinas/Badan', 'RSUD', 'Puskesmas', 'Kecamatan', 'Kelurahan'] &&
+        data.display_name is string && data.display_name.size() >= 1 && data.display_name.size() <= 200 &&
+        data.instansi_label is string && data.instansi_label.size() >= 1 && data.instansi_label.size() <= 64 &&
+        data.instansi_lengkap is string && data.instansi_lengkap.size() >= 1 && data.instansi_lengkap.size() <= 200 &&
+        data.jabatan is string && data.jabatan.size() <= 120 &&
+        data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 &&
+        data.ownerId == request.auth.uid &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidMatrix(data) {
+      return data.keys().hasAll([
+          'matrix_id', 'periode_id', 'opd_id', 'strategi', 'kode',
+          'program', 'kegiatan', 'sub_kegiatan', 'alokasi_anggaran',
+          'sumber_pembiayaan', 'sifat_bantuan', 'jumlah_sasaran',
+          'besaran_manfaat', 'jenis_bantuan', 'durasi_pemberian_bantuan',
+          'ownerId', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'matrix_id', 'periode_id', 'opd_id', 'strategi', 'kode',
+          'program', 'kegiatan', 'sub_kegiatan',
+          'aktivitas_real_langsung', 'aktivitas_real_tidak_langsung', 'aktivitas_real_penunjang',
+          'alokasi_anggaran', 'sumber_pembiayaan', 'sifat_bantuan',
+          'lokasi', 'lokasi_kecamatan', 'lokasi_desa', 'lokasi_spesifik',
+          'jumlah_sasaran', 'satuan_sasaran', 'keterangan_sasaran',
+          'besaran_manfaat', 'jenis_bantuan', 'durasi_pemberian_bantuan',
+          'ownerId', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.matrix_id) &&
+        isValidId(data.periode_id) &&
+        isValidId(data.opd_id) &&
+        data.strategi is string && data.strategi.size() >= 1 && data.strategi.size() <= 200 &&
+        data.kode is string && data.kode.size() >= 1 && data.kode.size() <= 64 &&
+        data.program is string && data.program.size() <= 300 &&
+        data.kegiatan is string && data.kegiatan.size() <= 300 &&
+        data.sub_kegiatan is string && data.sub_kegiatan.size() >= 1 && data.sub_kegiatan.size() <= 400 &&
+        (!('aktivitas_real_langsung' in data) || (data.aktivitas_real_langsung is string && data.aktivitas_real_langsung.size() <= 1500)) &&
+        (!('aktivitas_real_tidak_langsung' in data) || (data.aktivitas_real_tidak_langsung is string && data.aktivitas_real_tidak_langsung.size() <= 1500)) &&
+        (!('aktivitas_real_penunjang' in data) || (data.aktivitas_real_penunjang is string && data.aktivitas_real_penunjang.size() <= 1500)) &&
+        data.alokasi_anggaran is number && data.alokasi_anggaran >= 0 &&
+        data.sumber_pembiayaan is string && data.sumber_pembiayaan.size() <= 300 &&
+        data.sifat_bantuan is string && data.sifat_bantuan.size() <= 40 &&
+        (!('lokasi' in data) || (data.lokasi is string && data.lokasi.size() <= 300)) &&
+        (!('lokasi_kecamatan' in data) || (data.lokasi_kecamatan is string && data.lokasi_kecamatan.size() <= 120)) &&
+        (!('lokasi_desa' in data) || (data.lokasi_desa is string && data.lokasi_desa.size() <= 200)) &&
+        (!('lokasi_spesifik' in data) || (data.lokasi_spesifik is string && data.lokasi_spesifik.size() <= 200)) &&
+        data.jumlah_sasaran is number && data.jumlah_sasaran >= 0 &&
+        (!('satuan_sasaran' in data) || (data.satuan_sasaran is string && data.satuan_sasaran.size() <= 64)) &&
+        (!('keterangan_sasaran' in data) || (data.keterangan_sasaran is string && data.keterangan_sasaran.size() <= 500)) &&
+        data.besaran_manfaat is string && data.besaran_manfaat.size() <= 300 &&
+        data.jenis_bantuan is string && data.jenis_bantuan.size() <= 120 &&
+        data.durasi_pemberian_bantuan is string && data.durasi_pemberian_bantuan.size() <= 120 &&
+        data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 &&
+        data.ownerId == request.auth.uid &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidRealisasi(data) {
+      return data.keys().hasAll([
+          'realisasi_id', 'matrix_id', 'semester', 'realisasi',
+          'status_verifikasi', 'catatan_verifikator',
+          'ownerId', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'realisasi_id', 'matrix_id', 'semester', 'realisasi',
+          'status_verifikasi', 'catatan_verifikator',
+          'submitted_at', 'verified_at', 'verified_by',
+          'ownerId', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.realisasi_id) &&
+        isValidId(data.matrix_id) &&
+        data.semester in [1, 2] &&
+        data.realisasi is number && data.realisasi >= 0 &&
+        data.status_verifikasi in ['Belum Diisi', 'Draft', 'Menunggu Verifikasi', 'Terverifikasi', 'Perlu Perbaikan'] &&
+        data.catatan_verifikator is string && data.catatan_verifikator.size() <= 1000 &&
+        (!('submitted_at' in data) || data.submitted_at == null || (data.submitted_at is string && data.submitted_at.size() <= 64)) &&
+        (!('verified_at' in data) || data.verified_at == null || (data.verified_at is string && data.verified_at.size() <= 64)) &&
+        (!('verified_by' in data) || data.verified_by == null || (data.verified_by is string && data.verified_by.size() <= 120)) &&
+        data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 &&
+        data.ownerId == request.auth.uid &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAuditLog(data) {
+      return data.keys().hasAll([
+          'log_id', 'matrix_id', 'opd_id', 'user_role',
+          'user_name', 'aksi', 'detail_perubahan', 'ownerId', 'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'log_id', 'matrix_id', 'semester', 'opd_id', 'user_role',
+          'user_name', 'aksi', 'detail_perubahan',
+          'nilai_sebelumnya', 'nilai_baru', 'ownerId', 'createdAt'
+        ]) &&
+        isValidId(data.log_id) &&
+        data.matrix_id is string && data.matrix_id.size() >= 1 && data.matrix_id.size() <= 64 &&
+        (!('semester' in data) || data.semester == null || data.semester in [1, 2]) &&
+        data.opd_id is string && data.opd_id.size() >= 1 && data.opd_id.size() <= 64 &&
+        data.user_role in ['ADMIN', 'OPD'] &&
+        data.user_name is string && data.user_name.size() >= 1 && data.user_name.size() <= 150 &&
+        data.aksi is string && data.aksi.size() >= 1 && data.aksi.size() <= 200 &&
+        data.detail_perubahan is string && data.detail_perubahan.size() <= 1000 &&
+        (!('nilai_sebelumnya' in data) || (data.nilai_sebelumnya is string && data.nilai_sebelumnya.size() <= 300)) &&
+        (!('nilai_baru' in data) || (data.nilai_baru is string && data.nilai_baru.size() <= 300)) &&
+        data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 &&
+        data.ownerId == request.auth.uid &&
+        data.createdAt is timestamp;
+    }
+
+    // 1. Admins Collection
+    match /admins/{adminUid} {
+      allow get: if isVerifiedUser() && isValidId(adminUid) && (request.auth.uid == adminUid || isAdmin());
+      allow list: if isAdmin() && resource.data.uid == request.auth.uid;
+      allow create: if isVerifiedUser() && isValidId(adminUid) && adminUid == request.auth.uid && isValidAdminRole(incoming()) && incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    // 2. Periodes Collection
+    match /periodes/{periodeId} {
+      allow get: if isOwnerOrAdmin() && isValidId(periodeId);
+      allow list: if isOwnerOrAdmin();
+      allow create: if isVerifiedUser() && isValidId(periodeId) && incoming().periode_id == periodeId && isValidPeriode(incoming()) && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isOwnerOrAdmin() && isValidId(periodeId) && isValidPeriode(incoming()) &&
+        incoming().periode_id == existing().periode_id &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'nama_periode', 'semester_1_buka', 'semester_2_buka',
+          'batas_semester_1', 'batas_semester_2', 'is_active', 'updatedAt'
+        ]);
+      allow delete: if isOwnerOrAdmin() && isValidId(periodeId);
+    }
+
+    // 3. OPDs Collection
+    match /opds/{opdId} {
+      allow get: if isOwnerOrAdmin() && isValidId(opdId);
+      allow list: if isOwnerOrAdmin();
+      allow create: if isVerifiedUser() && isValidId(opdId) && incoming().opd_id == opdId && isValidOPD(incoming()) && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isOwnerOrAdmin() && isValidId(opdId) && isValidOPD(incoming()) &&
+        incoming().opd_id == existing().opd_id &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'kode_opd', 'nama_opd', 'singkatan', 'kategori', 'kepala_opd', 'updatedAt'
+        ]);
+      allow delete: if isOwnerOrAdmin() && isValidId(opdId);
+    }
+
+    // 4. User Accounts Collection (Restricted to Owner or Admin - No Blanket Reads)
+    match /user_accounts/{userId} {
+      allow get: if isOwnerOrAdmin() && isValidId(userId);
+      allow list: if isOwnerOrAdmin();
+      allow create: if isVerifiedUser() && isValidId(userId) && incoming().user_id == userId && isValidUserAccount(incoming()) && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isOwnerOrAdmin() && isValidId(userId) && isValidUserAccount(incoming()) &&
+        incoming().user_id == existing().user_id &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'username', 'email', 'password_hint', 'role', 'opd_id', 'kategori',
+          'display_name', 'instansi_label', 'instansi_lengkap', 'jabatan', 'updatedAt'
+        ]);
+      allow delete: if isOwnerOrAdmin() && isValidId(userId);
+    }
+
+    // 5. Matrices Collection
+    match /matrices/{matrixId} {
+      allow get: if isOwnerOrAdmin() && isValidId(matrixId);
+      allow list: if isOwnerOrAdmin();
+      allow create: if isVerifiedUser() && isValidId(matrixId) && incoming().matrix_id == matrixId && isValidMatrix(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/periodes/$(incoming().periode_id)) &&
+        exists(/databases/$(database)/documents/opds/$(incoming().opd_id));
+      allow update: if isOwnerOrAdmin() && isValidId(matrixId) && isValidMatrix(incoming()) &&
+        incoming().matrix_id == existing().matrix_id &&
+        incoming().periode_id == existing().periode_id &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          isAdmin() || (
+            existing().ownerId == request.auth.uid &&
+            incoming().opd_id == existing().opd_id &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'strategi', 'kode', 'program', 'kegiatan', 'sub_kegiatan',
+              'aktivitas_real_langsung', 'aktivitas_real_tidak_langsung', 'aktivitas_real_penunjang',
+              'alokasi_anggaran', 'sumber_pembiayaan', 'sifat_bantuan',
+              'lokasi', 'lokasi_kecamatan', 'lokasi_desa', 'lokasi_spesifik',
+              'jumlah_sasaran', 'satuan_sasaran', 'keterangan_sasaran',
+              'besaran_manfaat', 'jenis_bantuan', 'durasi_pemberian_bantuan', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isOwnerOrAdmin() && isValidId(matrixId);
+    }
+
+    // 6. Realisasis Collection (With Terminal State Lock on 'Terverifikasi')
+    match /realisasis/{realisasiId} {
+      allow get: if isOwnerOrAdmin() && isValidId(realisasiId);
+      allow list: if isOwnerOrAdmin();
+      allow create: if isVerifiedUser() && isValidId(realisasiId) && incoming().realisasi_id == realisasiId && isValidRealisasi(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || incoming().status_verifikasi in ['Belum Diisi', 'Draft', 'Menunggu Verifikasi']) &&
+        exists(/databases/$(database)/documents/matrices/$(incoming().matrix_id));
+      allow update: if isOwnerOrAdmin() && isValidId(realisasiId) && isValidRealisasi(incoming()) &&
+        incoming().realisasi_id == existing().realisasi_id &&
+        incoming().matrix_id == existing().matrix_id &&
+        incoming().semester == existing().semester &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          isAdmin() || (
+            existing().ownerId == request.auth.uid &&
+            existing().status_verifikasi != 'Terverifikasi' &&
+            incoming().status_verifikasi in ['Belum Diisi', 'Draft', 'Menunggu Verifikasi'] &&
+            incoming().catatan_verifikator == existing().catatan_verifikator &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'realisasi', 'status_verifikasi', 'submitted_at', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isOwnerOrAdmin() && isValidId(realisasiId) && (
+        isAdmin() || existing().status_verifikasi != 'Terverifikasi'
+      );
+    }
+
+    // 7. Audit Logs Collection (Append-only, Immutable)
+    match /audit_logs/{logId} {
+      allow get: if isOwnerOrAdmin() && isValidId(logId);
+      allow list: if isOwnerOrAdmin();
+      allow create: if isVerifiedUser() && isValidId(logId) && incoming().log_id == logId && isValidAuditLog(incoming()) && incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+  }
+}
