@@ -697,11 +697,12 @@ export class DatabaseService {
 
     void ensureFirebaseAuth().then(async () => {
       try {
-        const purgeFlag = 'e_oppkpke_blora_zero_opd_cloud_purge_v1';
+        const purgeFlag = 'e_oppkpke_blora_zero_opd_cloud_purge_optimis_97d75_v1';
         if (typeof window !== 'undefined' && !localStorage.getItem(purgeFlag)) {
           localStorage.setItem(purgeFlag, 'true');
           await this.syncAllLocalToFirestore({ pruneRemoved: true });
           await pruneFirestoreCollection('audit_logs', new Set());
+          await this.syncAllUsersToFirebaseAuth();
         }
       } catch {
         // ignore cloud purge errors

@@ -19,15 +19,72 @@ import {
 } from 'firebase/firestore';
 import rawFirebaseConfig from '../firebase-applet-config.json';
 
+const OPTIMIS_DEFAULT_FIREBASE_CONFIG = {
+  apiKey: 'AIzaSyANkAaPH6wBAp-qDsjBCLwnvvCjOSgHKa8',
+  authDomain: 'optimis-97d75.firebaseapp.com',
+  projectId: 'optimis-97d75',
+  storageBucket: 'optimis-97d75.firebasestorage.app',
+  messagingSenderId: '299120054201',
+  appId: '1:299120054201:web:6701b7127e282e22a1f068',
+  measurementId: 'G-VF0GHQL14R',
+  firestoreDatabaseId: '(default)',
+};
+
+const env = import.meta.env || {};
+
+const isValidCustomProject =
+  rawFirebaseConfig?.projectId &&
+  rawFirebaseConfig.projectId !== 'gen-lang-client-0630018891' &&
+  rawFirebaseConfig.projectId !== 'remixed-project-id';
+
+const baseConfig = isValidCustomProject
+  ? rawFirebaseConfig
+  : OPTIMIS_DEFAULT_FIREBASE_CONFIG;
+
+const resolvedProjectId =
+  env.VITE_FIREBASE_PROJECT_ID ||
+  baseConfig.projectId ||
+  OPTIMIS_DEFAULT_FIREBASE_CONFIG.projectId;
+
+const rawDbId =
+  env.VITE_FIREBASE_DATABASE_ID ||
+  baseConfig.firestoreDatabaseId ||
+  '(default)';
+
 const resolvedDatabaseId =
-  !rawFirebaseConfig.firestoreDatabaseId ||
-  (rawFirebaseConfig.projectId === 'e-lamisblora' &&
-    rawFirebaseConfig.firestoreDatabaseId.startsWith('ai-studio-'))
+  !rawDbId ||
+  ((resolvedProjectId === 'optimis-97d75' ||
+    resolvedProjectId === 'e-lamisblora') &&
+    rawDbId.startsWith('ai-studio-'))
     ? '(default)'
-    : rawFirebaseConfig.firestoreDatabaseId;
+    : rawDbId;
 
 export const firebaseConfig = {
-  ...rawFirebaseConfig,
+  apiKey:
+    env.VITE_FIREBASE_API_KEY ||
+    baseConfig.apiKey ||
+    OPTIMIS_DEFAULT_FIREBASE_CONFIG.apiKey,
+  authDomain:
+    env.VITE_FIREBASE_AUTH_DOMAIN ||
+    baseConfig.authDomain ||
+    OPTIMIS_DEFAULT_FIREBASE_CONFIG.authDomain,
+  projectId: resolvedProjectId,
+  storageBucket:
+    env.VITE_FIREBASE_STORAGE_BUCKET ||
+    baseConfig.storageBucket ||
+    OPTIMIS_DEFAULT_FIREBASE_CONFIG.storageBucket,
+  messagingSenderId:
+    env.VITE_FIREBASE_MESSAGING_SENDER_ID ||
+    baseConfig.messagingSenderId ||
+    OPTIMIS_DEFAULT_FIREBASE_CONFIG.messagingSenderId,
+  appId:
+    env.VITE_FIREBASE_APP_ID ||
+    baseConfig.appId ||
+    OPTIMIS_DEFAULT_FIREBASE_CONFIG.appId,
+  measurementId:
+    env.VITE_FIREBASE_MEASUREMENT_ID ||
+    baseConfig.measurementId ||
+    OPTIMIS_DEFAULT_FIREBASE_CONFIG.measurementId,
   firestoreDatabaseId: resolvedDatabaseId,
 };
 

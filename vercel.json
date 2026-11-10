@@ -3,10 +3,10 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "installCommand": "npm install",
+  "installCommand": "npm install --legacy-peer-deps",
   "rewrites": [
     {
-      "source": "/((?!assets/).*)",
+      "source": "/((?!assets/|.*\\..*).*)",
       "destination": "/index.html"
     }
   ],

@@ -1,7 +1,13 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import {fileURLToPath} from 'url';
 import {defineConfig, Plugin} from 'vite';
+
+const __dirname =
+  typeof import.meta.dirname === 'string'
+    ? import.meta.dirname
+    : path.dirname(fileURLToPath(import.meta.url));
 
 function unwrapAtRuleBlocks(input: string, headerRegex: RegExp): string {
   let css = input;
@@ -167,7 +173,7 @@ export default defineConfig(() => {
     plugins: [react(), tailwindcss(), universalCssCompatibilityPlugin()],
     resolve: {
       alias: {
-        '@': path.resolve(import.meta.dirname, '.'),
+        '@': path.resolve(__dirname, '.'),
       },
     },
     build: {
