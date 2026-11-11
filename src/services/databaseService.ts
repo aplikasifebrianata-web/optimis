@@ -41,6 +41,7 @@ import {
 } from '../data/bloraSeedData';
 import { formatRupiah } from '../utils/formatters';
 import { ParsedExcelBaseRow } from '../utils/excelService';
+import { SipdService } from './sipdService';
 
 const STORAGE_KEYS = {
   PERIODE: 'e_oppkpke_blora_periode_v3',
@@ -388,6 +389,7 @@ export class DatabaseService {
           serializeRealisasiForFirestore(r)
         )
       ),
+      SipdService.syncWithCloud(),
     ]);
 
     const nowIso = new Date().toISOString();
@@ -594,6 +596,8 @@ export class DatabaseService {
           .sort((a, b) => b.created_at.localeCompare(a.created_at));
         saveTable(STORAGE_KEYS.AUDIT, items, true);
       }
+
+      await SipdService.syncWithCloud();
 
       this.setLastSyncTimestamp(new Date().toISOString());
       notifyRealtimeChannel(STORAGE_KEYS.LAST_SYNC_AT);

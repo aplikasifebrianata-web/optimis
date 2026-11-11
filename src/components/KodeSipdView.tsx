@@ -21,8 +21,6 @@ import {
   ChevronRight,
   Eye,
   X,
-  Filter,
-  Sparkles,
 } from 'lucide-react';
 import { KodeSipdItem, OPD, UserRole } from '../types/oppkpke';
 import { SipdService, getUploadedSipdMeta } from '../services/sipdService';
@@ -98,6 +96,8 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  const [isSyncingSipdCloud, setIsSyncingSipdCloud] = useState(false);
+
   const reloadData = async () => {
     setIsLoading(true);
     try {
@@ -114,7 +114,42 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
 
   useEffect(() => {
     void reloadData();
+    const unsub = SipdService.subscribeToSipdCloud(() => {
+      void reloadData();
+    });
+    return () => {
+      unsub();
+    };
   }, []);
+
+  const handleManualSyncSipdCloud = async () => {
+    if (isSyncingSipdCloud) return;
+    setIsSyncingSipdCloud(true);
+    try {
+      const res = await SipdService.syncWithCloud();
+      await reloadData();
+      if (res.direction === 'pushed') {
+        onShowToast(
+          'success',
+          `Berhasil mengunggah & menyinkronkan ${formatNumber(res.count)} Kode SIPD ke Cloud Firestore (optimis-97d75).`
+        );
+      } else if (res.direction === 'pulled') {
+        onShowToast(
+          'success',
+          `Berhasil menarik ${formatNumber(res.count)} Kode SIPD dari Cloud Firestore (optimis-97d75).`
+        );
+      } else {
+        onShowToast(
+          'success',
+          'Sinkronisasi Cloud Firestore selesai (belum ada data Kode SIPD yang diunggah).'
+        );
+      }
+    } catch {
+      onShowToast('error', 'Gagal menyinkronkan Kode SIPD dengan Cloud Firestore.');
+    } finally {
+      setIsSyncingSipdCloud(false);
+    }
+  };
 
   useEffect(() => {
     if (isOpdRole) {
@@ -553,6 +588,15 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
     setSelectedKegiatan('ALL');
   };
 
+  const hasActiveFilters =
+    Boolean(searchQuery) ||
+    (!isOpdRole && onlyMyOpd) ||
+    selectedSkpd !== 'ALL' ||
+    selectedSubUnit !== 'ALL' ||
+    selectedBidang !== 'ALL' ||
+    selectedProgram !== 'ALL' ||
+    selectedKegiatan !== 'ALL';
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -561,54 +605,59 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
       transition={{ duration: 0.22 }}
       className="space-y-5"
     >
-      {/* HEADER BANNER KODE SIPD */}
-      <div className="rounded-3xl bg-gradient-to-r from-[#1E3A8A] via-[#1D4ED8] to-[#2563EB] text-white p-5 sm:p-6 shadow-[0_14px_34px_-12px_rgba(29,78,216,0.45)] relative overflow-hidden">
-        <div className="relative z-10 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-          <div className="space-y-1.5 max-w-3xl">
+      {/* HEADER BANNER KODE SIPD — 2 BARIS TERSTRUKTUR & RAPI */}
+      <div className="rounded-3xl bg-gradient-to-br from-[#1E3A8A] via-[#1D4ED8] to-[#2563EB] text-white p-5 sm:p-6 shadow-[0_14px_34px_-12px_rgba(29,78,216,0.4)] relative overflow-hidden">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv,.xlsx,.xls"
+          onChange={handleImportFileChange}
+          className="hidden"
+        />
+
+        {/* Baris Atas: Judul & Aksi Utama */}
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+          <div className="space-y-2 max-w-4xl">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 backdrop-blur-xs text-[11px] font-bold tracking-wide uppercase">
-                <BookOpen className="w-3.5 h-3.5" />
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 backdrop-blur-xs text-[11px] font-bold tracking-wider uppercase whitespace-nowrap">
+                <BookOpen className="w-3.5 h-3.5 shrink-0" />
                 <span>
                   {isOpdRole
-                    ? `Kode SIPD Khusus Instansi: ${activeOpd.singkatan}`
+                    ? `Kode SIPD Instansi · ${activeOpd.singkatan}`
                     : 'Referensi Master Nomenklatur SIPD RI · Kabupaten Blora'}
                 </span>
-              </div>
+              </span>
+
               {uploadedCsvMeta && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-400/20 border border-emerald-300/40 text-[11px] font-bold text-emerald-100">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-400/20 border border-emerald-300/40 text-[11px] font-bold text-emerald-100 whitespace-nowrap">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
                   <span>CSV Aktif: {uploadedCsvMeta.fileName}</span>
                 </span>
               )}
             </div>
-            <h2 className="text-lg sm:text-xl font-extrabold tracking-tight">
+
+            <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight leading-snug">
               {isOpdRole
                 ? `Katalog Kode SIPD — ${activeOpd.nama_opd}`
                 : 'Katalog Kode SIPD (Urusan, SKPD, Program, Kegiatan & Sub Kegiatan)'}
             </h2>
-            <p className="text-xs sm:text-sm text-blue-100 leading-relaxed">
+
+            <p className="text-xs sm:text-sm text-blue-100 leading-relaxed max-w-3xl">
               {isOpdRole
-                ? `Menampilkan khusus daftar Program, Kegiatan, dan Sub Kegiatan milik ${activeOpd.nama_opd} (terisolasi per instansi agar tidak salah kamar saat pengisian Tambah Matriks).`
+                ? `Daftar resmi Program, Kegiatan, dan Sub Kegiatan milik ${activeOpd.nama_opd}. Terisolasi otomatis per instansi agar tidak salah kamar saat pengisian Matriks.`
                 : 'Basis data terpadu seluruh Kode Rekening SKPD, Sub Unit (Puskesmas, RSUD, Kecamatan, Kelurahan), Program, Kegiatan, dan Sub Kegiatan sesuai struktur SIPD Kabupaten Blora.'}
             </p>
           </div>
 
+          {/* Grup Tombol Aksi Utama (Kanan Atas) */}
           <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".csv,.xlsx,.xls"
-              onChange={handleImportFileChange}
-              className="hidden"
-            />
-
             {userRole === 'ADMIN' && (
               <button
                 type="button"
                 onClick={handleOpenAddModal}
-                className="px-3.5 py-2.5 rounded-2xl bg-white text-[#1D4ED8] hover:bg-blue-50 text-xs font-extrabold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                className="px-4 py-2.5 rounded-xl bg-white text-[#1D4ED8] hover:bg-blue-50 text-xs font-extrabold inline-flex items-center gap-1.5 shadow-sm transition-all cursor-pointer whitespace-nowrap shrink-0"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-4 h-4 shrink-0" />
                 <span>Tambah Kode SIPD</span>
               </button>
             )}
@@ -616,11 +665,37 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="px-3.5 py-2.5 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/25 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+              className="px-4 py-2.5 rounded-xl bg-white/15 hover:bg-white/25 border border-white/25 text-white text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0"
               title="Lampirkan / Unggah file CSV atau Excel Kode SIPD terbaru"
             >
-              <Upload className="w-4 h-4" />
-              <span>Lampirkan CSV / Excel SIPD</span>
+              <Upload className="w-4 h-4 shrink-0" />
+              <span>Unggah CSV / Excel SIPD</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Baris Bawah: Toolbar Sinkronisasi Cloud, Ekspor & Reset Data */}
+        <div className="relative z-10 mt-4 pt-3.5 border-t border-white/15 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-blue-100">
+            <span className="inline-flex items-center gap-1.5 font-medium">
+              <Layers className="w-3.5 h-3.5 text-blue-200 shrink-0" />
+              <span>
+                Tersimpan <strong className="text-white tabular-nums">{formatNumber(stats.totalUnique)}</strong> Sub Kegiatan pada{' '}
+                <strong className="text-white tabular-nums">{formatNumber(stats.skpdCount)}</strong> SKPD
+              </span>
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleManualSyncSipdCloud}
+              disabled={isSyncingSipdCloud}
+              className="px-3.5 py-2 rounded-xl bg-amber-400/20 hover:bg-amber-400/30 border border-amber-300/40 text-amber-100 text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-60 whitespace-nowrap shrink-0"
+              title="Sinkronkan data Kode SIPD antara browser ini dan Cloud Firestore (optimis-97d75) untuk Vercel"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${isSyncingSipdCloud ? 'animate-spin' : ''}`} />
+              <span>{isSyncingSipdCloud ? 'Menyinkronkan...' : 'Sinkronkan Cloud'}</span>
             </button>
 
             <button
@@ -639,9 +714,9 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
                   `Mengunduh ${formatNumber(filteredRows.length)} baris Kode SIPD ke Excel (.xlsx).`
                 );
               }}
-              className="px-3.5 py-2.5 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+              className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-xs transition-all cursor-pointer whitespace-nowrap shrink-0"
             >
-              <FileSpreadsheet className="w-4 h-4" />
+              <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
               <span>Export Excel ({formatNumber(filteredRows.length)})</span>
             </button>
 
@@ -661,22 +736,24 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
                   `Mengunduh ${formatNumber(filteredRows.length)} baris Kode SIPD ke CSV (;).`
                 );
               }}
-              className="px-3 py-2.5 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/25 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+              className="px-3 py-2 rounded-xl bg-white/15 hover:bg-white/25 border border-white/25 text-white text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0"
               title="Unduh Format CSV Titik Koma (;)"
             >
-              <Download className="w-4 h-4" />
-              <span>CSV</span>
+              <Download className="w-3.5 h-3.5 shrink-0" />
+              <span>Unduh CSV</span>
             </button>
 
-            <button
-              type="button"
-              onClick={handleResetCustom}
-              className="px-3 py-2.5 rounded-2xl bg-rose-500/25 hover:bg-rose-500/40 border border-rose-300/40 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-              title="Kosongkan / 0-kan Seluruh Data Kode SIPD"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span>0-kan Data</span>
-            </button>
+            {userRole === 'ADMIN' && (
+              <button
+                type="button"
+                onClick={handleResetCustom}
+                className="px-3 py-2 rounded-xl bg-rose-500/25 hover:bg-rose-500/40 border border-rose-300/40 text-white text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0"
+                title="Kosongkan / 0-kan Seluruh Data Kode SIPD"
+              >
+                <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                <span>0-kan Data</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -686,14 +763,14 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
         <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs flex items-start justify-between gap-3">
           <div>
             <p className="text-xs font-semibold text-slate-500">Master Sub Kegiatan Unik</p>
-            <p className="text-2xl font-extrabold font-mono-tabular text-slate-900 mt-1">
+            <p className="text-2xl font-extrabold tabular-nums tracking-tight text-slate-900 mt-1">
               {formatNumber(stats.totalUnique)}
             </p>
             <p className="text-[11px] text-slate-500 mt-1">
-              Dari total <strong className="text-slate-700">{formatNumber(stats.totalAllCsv)}</strong> baris rincian CSV SIPD
+              Dari total <strong className="text-slate-700 tabular-nums">{formatNumber(stats.totalAllCsv)}</strong> baris rincian CSV SIPD
             </p>
           </div>
-          <div className="w-10 h-10 rounded-2xl bg-blue-50 text-[#2563EB] flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#2563EB] flex items-center justify-center shrink-0">
             <BookOpen className="w-5 h-5" />
           </div>
         </div>
@@ -701,14 +778,15 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
         <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs flex items-start justify-between gap-3">
           <div>
             <p className="text-xs font-semibold text-slate-500">Cakupan SKPD & Sub Unit</p>
-            <p className="text-2xl font-extrabold font-mono-tabular text-slate-900 mt-1">
-              {formatNumber(stats.skpdCount)} <span className="text-sm font-bold text-slate-500">SKPD</span>
+            <p className="text-2xl font-extrabold tabular-nums tracking-tight text-slate-900 mt-1">
+              {formatNumber(stats.skpdCount)}{' '}
+              <span className="text-sm font-bold text-slate-500">SKPD</span>
             </p>
             <p className="text-[11px] text-slate-500 mt-1">
-              Mencakup <strong className="text-[#2563EB]">{formatNumber(stats.subUnitCount)}</strong> Sub Unit / UPTD / Puskesmas / Kel.
+              Mencakup <strong className="text-[#2563EB] tabular-nums">{formatNumber(stats.subUnitCount)}</strong> Sub Unit / UPTD / Puskesmas / Kel.
             </p>
           </div>
-          <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
             <Building2 className="w-5 h-5" />
           </div>
         </div>
@@ -716,14 +794,15 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
         <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs flex items-start justify-between gap-3">
           <div>
             <p className="text-xs font-semibold text-slate-500">Total Program & Kegiatan</p>
-            <p className="text-2xl font-extrabold font-mono-tabular text-slate-900 mt-1">
-              {formatNumber(stats.programCount)} <span className="text-sm font-bold text-slate-500">Program</span>
+            <p className="text-2xl font-extrabold tabular-nums tracking-tight text-slate-900 mt-1">
+              {formatNumber(stats.programCount)}{' '}
+              <span className="text-sm font-bold text-slate-500">Program</span>
             </p>
             <p className="text-[11px] text-slate-500 mt-1">
-              Terdiri atas <strong className="text-emerald-700">{formatNumber(stats.kegiatanCount)}</strong> Kegiatan Daerah
+              Terdiri atas <strong className="text-emerald-700 tabular-nums">{formatNumber(stats.kegiatanCount)}</strong> Kegiatan Daerah
             </p>
           </div>
-          <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
             <Layers className="w-5 h-5" />
           </div>
         </div>
@@ -731,72 +810,50 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
         <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs flex items-start justify-between gap-3">
           <div>
             <p className="text-xs font-semibold text-slate-500">Nomenklatur Sub Kegiatan</p>
-            <p className="text-2xl font-extrabold font-mono-tabular text-slate-900 mt-1">
+            <p className="text-2xl font-extrabold tabular-nums tracking-tight text-slate-900 mt-1">
               {formatNumber(stats.subKegiatanCount)}
             </p>
             <p className="text-[11px] text-slate-500 mt-1">
               Siap disalin & dihubungkan langsung ke Matriks
             </p>
           </div>
-          <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-            <Sparkles className="w-5 h-5" />
+          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+            <CheckCircle2 className="w-5 h-5" />
           </div>
         </div>
       </div>
 
       {/* PANEL PENCARIAN & FILTER BERTINGKAT */}
       <div className="bg-white rounded-3xl border border-slate-200/80 p-4 sm:p-5 shadow-xs space-y-4">
+        {/* Baris 1: Pencarian Cepat + Kontrol Mode */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-          {/* Input Pencarian Cepat */}
           <div className="relative flex-1">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari Kode Sub Kegiatan (misal 1.01.02.2.01.0003), Nama Sub Kegiatan, Program, Kegiatan, SKPD, Puskesmas, Kecamatan..."
-              className="w-full pl-10 pr-9 py-2.5 text-xs font-medium text-slate-900 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:bg-white transition-all"
+              placeholder="Cari Kode Sub Kegiatan (contoh: 1.01.02.2.01.0003), Nama Sub Kegiatan, Program, Kegiatan, atau SKPD..."
+              className="w-full pl-10 pr-9 py-2.5 text-xs font-medium text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:bg-white transition-all"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                title="Bersihkan kata kunci"
               >
                 <X className="w-4 h-4" />
               </button>
             )}
           </div>
 
-          {/* Tombol Mode Dataset & Mode Tampilan */}
           <div className="flex flex-wrap items-center gap-2 shrink-0">
-            {/* Info / Tombol Filter Cepat Instansi Aktif */}
-            {isOpdRole ? (
-              <div className="px-3 py-2 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Terkunci Khusus Instansi: {activeOpd.singkatan}</span>
+            {isOpdRole && (
+              <div className="px-3 py-2 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 inline-flex items-center gap-1.5 whitespace-nowrap">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>Instansi Aktif: {activeOpd.singkatan}</span>
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  const next = !onlyMyOpd;
-                  setOnlyMyOpd(next);
-                  if (next) {
-                    setSelectedSkpd('ALL');
-                    setSelectedSubUnit('ALL');
-                  }
-                }}
-                className={`px-3 py-2 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition-all cursor-pointer ${
-                  onlyMyOpd
-                    ? 'bg-[#2563EB] text-white border-[#2563EB] shadow-xs'
-                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                }`}
-                title={`Filter khusus untuk ${activeOpd.nama_opd}`}
-              >
-                <Filter className="w-3.5 h-3.5" />
-                <span>Filter Instansi Aktif ({activeOpd.singkatan})</span>
-              </button>
             )}
 
             {/* Toggle Master Unik vs Semua Baris CSV */}
@@ -804,7 +861,7 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
               <button
                 type="button"
                 onClick={() => setDatasetMode('unique')}
-                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer whitespace-nowrap tabular-nums ${
                   datasetMode === 'unique'
                     ? 'bg-white text-[#1D4ED8] shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
@@ -815,13 +872,13 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
               <button
                 type="button"
                 onClick={() => setDatasetMode('all')}
-                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer whitespace-nowrap tabular-nums ${
                   datasetMode === 'all'
                     ? 'bg-white text-[#1D4ED8] shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                Semua Baris CSV ({formatNumber(stats.totalAllCsv)})
+                Semua Baris ({formatNumber(stats.totalAllCsv)})
               </button>
             </div>
 
@@ -830,37 +887,46 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
               <button
                 type="button"
                 onClick={() => setViewMode('table')}
-                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-[11px] font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
                   viewMode === 'table'
                     ? 'bg-white text-[#1D4ED8] shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                <Table2 className="w-3.5 h-3.5" />
+                <Table2 className="w-3.5 h-3.5 shrink-0" />
                 <span>Tabel</span>
               </button>
               <button
                 type="button"
                 onClick={() => setViewMode('hierarchy')}
-                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-[11px] font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
                   viewMode === 'hierarchy'
                     ? 'bg-white text-[#1D4ED8] shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                <FolderTree className="w-3.5 h-3.5" />
+                <FolderTree className="w-3.5 h-3.5 shrink-0" />
                 <span>Hirarki</span>
               </button>
             </div>
           </div>
         </div>
 
-        {/* Dropdown Filter Bertingkat (OPD hanya melihat filter Program & Kegiatan milik instansinya sendiri) */}
+        {/* Baris 2: Dropdown Filter Bertingkat */}
         {isOpdRole ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-            <div>
-              <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                1. Filter Kode Program + Nama Program ({programOptions.length} Program di {activeOpd.singkatan})
+            <div
+              className={`p-3 rounded-2xl border transition-colors ${
+                selectedProgram !== 'ALL'
+                  ? 'bg-blue-50/40 border-blue-300'
+                  : 'bg-slate-50/70 border-slate-200/80'
+              }`}
+            >
+              <label className="flex items-center justify-between text-[11px] font-bold text-slate-600 mb-1.5">
+                <span>1. Filter Program ({activeOpd.singkatan})</span>
+                <span className="px-1.5 py-0.5 rounded bg-white text-slate-600 border border-slate-200/80 text-[10px] tabular-nums">
+                  {programOptions.length} Program
+                </span>
               </label>
               <select
                 value={selectedProgram}
@@ -868,7 +934,7 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
                   setSelectedProgram(e.target.value);
                   setSelectedKegiatan('ALL');
                 }}
-                className="w-full px-3 py-2 text-xs font-semibold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                className="w-full px-3 py-2 text-xs font-semibold text-slate-800 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
               >
                 <option value="ALL">Semua Program ({activeOpd.singkatan})</option>
                 {programOptions.map((p) => (
@@ -879,14 +945,23 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
               </select>
             </div>
 
-            <div>
-              <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                2. Filter Kode Kegiatan + Nama Kegiatan ({kegiatanOptions.length} Kegiatan)
+            <div
+              className={`p-3 rounded-2xl border transition-colors ${
+                selectedKegiatan !== 'ALL'
+                  ? 'bg-blue-50/40 border-blue-300'
+                  : 'bg-slate-50/70 border-slate-200/80'
+              }`}
+            >
+              <label className="flex items-center justify-between text-[11px] font-bold text-slate-600 mb-1.5">
+                <span>2. Filter Kegiatan</span>
+                <span className="px-1.5 py-0.5 rounded bg-white text-slate-600 border border-slate-200/80 text-[10px] tabular-nums">
+                  {kegiatanOptions.length} Kegiatan
+                </span>
               </label>
               <select
                 value={selectedKegiatan}
                 onChange={(e) => setSelectedKegiatan(e.target.value)}
-                className="w-full px-3 py-2 text-xs font-semibold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                className="w-full px-3 py-2 text-xs font-semibold text-slate-800 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
               >
                 <option value="ALL">Semua Kegiatan</option>
                 {kegiatanOptions.map((k) => (
@@ -899,20 +974,31 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
-            <div>
-              <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                1. Filter SKPD Induk ({skpdOptions.length} SKPD)
+            {/* 1. Filter SKPD Induk */}
+            <div
+              className={`p-3 rounded-2xl border transition-colors ${
+                selectedSkpd !== 'ALL'
+                  ? 'bg-blue-50/40 border-blue-300'
+                  : 'bg-slate-50/70 border-slate-200/80'
+              }`}
+            >
+              <label className="flex items-center justify-between text-[11px] font-bold text-slate-600 mb-1.5">
+                <span>1. SKPD Induk</span>
+                <span className="px-1.5 py-0.5 rounded bg-white text-slate-600 border border-slate-200/80 text-[10px] tabular-nums">
+                  {skpdOptions.length} SKPD
+                </span>
               </label>
               <select
                 value={selectedSkpd}
                 onChange={(e) => {
                   setSelectedSkpd(e.target.value);
+                  setOnlyMyOpd(false);
                   setSelectedSubUnit('ALL');
                   setSelectedBidang('ALL');
                   setSelectedProgram('ALL');
                   setSelectedKegiatan('ALL');
                 }}
-                className="w-full px-3 py-2 text-xs font-semibold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                className="w-full px-3 py-2 text-xs font-semibold text-slate-800 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
               >
                 <option value="ALL">Semua SKPD Kabupaten Blora</option>
                 {skpdOptions.map((s) => (
@@ -923,9 +1009,19 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
               </select>
             </div>
 
-            <div>
-              <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                2. Filter Sub Unit / UPTD / Puskesmas / Kel ({subUnitOptions.length})
+            {/* 2. Filter Sub Unit */}
+            <div
+              className={`p-3 rounded-2xl border transition-colors ${
+                selectedSubUnit !== 'ALL'
+                  ? 'bg-blue-50/40 border-blue-300'
+                  : 'bg-slate-50/70 border-slate-200/80'
+              }`}
+            >
+              <label className="flex items-center justify-between text-[11px] font-bold text-slate-600 mb-1.5">
+                <span>2. Sub Unit / UPTD / Kel</span>
+                <span className="px-1.5 py-0.5 rounded bg-white text-slate-600 border border-slate-200/80 text-[10px] tabular-nums">
+                  {subUnitOptions.length} Unit
+                </span>
               </label>
               <select
                 value={selectedSubUnit}
@@ -935,7 +1031,7 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
                   setSelectedProgram('ALL');
                   setSelectedKegiatan('ALL');
                 }}
-                className="w-full px-3 py-2 text-xs font-semibold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                className="w-full px-3 py-2 text-xs font-semibold text-slate-800 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
               >
                 <option value="ALL">Semua Sub Unit</option>
                 {subUnitOptions.map((su) => (
@@ -946,9 +1042,19 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
               </select>
             </div>
 
-            <div>
-              <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                3. Filter Program ({programOptions.length})
+            {/* 3. Filter Program */}
+            <div
+              className={`p-3 rounded-2xl border transition-colors ${
+                selectedProgram !== 'ALL'
+                  ? 'bg-blue-50/40 border-blue-300'
+                  : 'bg-slate-50/70 border-slate-200/80'
+              }`}
+            >
+              <label className="flex items-center justify-between text-[11px] font-bold text-slate-600 mb-1.5">
+                <span>3. Filter Program</span>
+                <span className="px-1.5 py-0.5 rounded bg-white text-slate-600 border border-slate-200/80 text-[10px] tabular-nums">
+                  {programOptions.length} Program
+                </span>
               </label>
               <select
                 value={selectedProgram}
@@ -956,7 +1062,7 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
                   setSelectedProgram(e.target.value);
                   setSelectedKegiatan('ALL');
                 }}
-                className="w-full px-3 py-2 text-xs font-semibold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                className="w-full px-3 py-2 text-xs font-semibold text-slate-800 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
               >
                 <option value="ALL">Semua Program</option>
                 {programOptions.map((p) => (
@@ -967,14 +1073,24 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
               </select>
             </div>
 
-            <div>
-              <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                4. Filter Kegiatan ({kegiatanOptions.length})
+            {/* 4. Filter Kegiatan */}
+            <div
+              className={`p-3 rounded-2xl border transition-colors ${
+                selectedKegiatan !== 'ALL'
+                  ? 'bg-blue-50/40 border-blue-300'
+                  : 'bg-slate-50/70 border-slate-200/80'
+              }`}
+            >
+              <label className="flex items-center justify-between text-[11px] font-bold text-slate-600 mb-1.5">
+                <span>4. Filter Kegiatan</span>
+                <span className="px-1.5 py-0.5 rounded bg-white text-slate-600 border border-slate-200/80 text-[10px] tabular-nums">
+                  {kegiatanOptions.length} Kegiatan
+                </span>
               </label>
               <select
                 value={selectedKegiatan}
                 onChange={(e) => setSelectedKegiatan(e.target.value)}
-                className="w-full px-3 py-2 text-xs font-semibold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                className="w-full px-3 py-2 text-xs font-semibold text-slate-800 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
               >
                 <option value="ALL">Semua Kegiatan</option>
                 {kegiatanOptions.map((k) => (
@@ -988,26 +1104,37 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
         )}
 
         {/* Info Bar Hasil Filter & Reset */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-slate-100 text-xs">
           <div className="flex flex-wrap items-center gap-2 text-slate-600">
             <span>
               Menampilkan{' '}
-              <strong className="text-slate-900 font-mono-tabular">
+              <strong className="text-slate-900 tabular-nums font-bold">
                 {formatNumber(filteredRows.length)}
               </strong>{' '}
               baris Kode SIPD {isOpdRole ? `khusus ${activeOpd.nama_opd}` : ''}
             </span>
-            {(searchQuery ||
-              (!isOpdRole && onlyMyOpd) ||
-              selectedSkpd !== 'ALL' ||
-              selectedSubUnit !== 'ALL' ||
-              selectedBidang !== 'ALL' ||
-              selectedProgram !== 'ALL' ||
-              selectedKegiatan !== 'ALL') && (
+
+            {selectedSkpd !== 'ALL' && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-blue-50 text-[#1D4ED8] font-bold text-[11px] border border-blue-200/70">
+                <span>SKPD: {selectedSkpd}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedSkpd('ALL');
+                    setSelectedSubUnit('ALL');
+                  }}
+                  className="hover:text-blue-900 cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {hasActiveFilters && (
               <button
                 type="button"
                 onClick={handleResetFilters}
-                className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 font-bold text-[11px] transition-colors cursor-pointer"
+                className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 font-bold text-[11px] transition-colors cursor-pointer whitespace-nowrap"
               >
                 Reset Semua Filter
               </button>
@@ -1019,7 +1146,7 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
             <select
               value={pageSize}
               onChange={(e) => setPageSize(Number(e.target.value))}
-              className="px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 text-xs font-bold text-slate-800"
+              className="px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 text-xs font-bold text-slate-800 cursor-pointer"
             >
               <option value={25}>25 baris</option>
               <option value={50}>50 baris</option>
@@ -1060,7 +1187,7 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
                   className="px-4 py-2.5 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
                   <Upload className="w-4 h-4" />
-                  <span>Lampirkan CSV / Excel Kode SIPD</span>
+                  <span>Unggah CSV / Excel Kode SIPD</span>
                 </button>
               </div>
             </>
@@ -1088,13 +1215,11 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-[#F8FAFF] border-b border-slate-200/90 text-[11px] font-extrabold text-slate-600 uppercase tracking-wider">
-                  <th className="py-3.5 px-3.5 w-12 text-center">No</th>
-                  <th className="py-3.5 px-3.5 min-w-[210px]">SKPD & Sub Unit</th>
-                  <th className="py-3.5 px-3.5 min-w-[200px]">Program</th>
-                  <th className="py-3.5 px-3.5 min-w-[210px]">Kegiatan</th>
-                  <th className="py-3.5 px-3.5 min-w-[165px]">Kode Sub Kegiatan</th>
-                  <th className="py-3.5 px-3.5 min-w-[250px]">Nama Sub Kegiatan</th>
-                  <th className="py-3.5 px-3.5 text-right min-w-[175px]">Aksi Cepat</th>
+                  <th className="py-3.5 px-3 w-12 text-center">No</th>
+                  <th className="py-3.5 px-4 w-[24%] min-w-[200px]">Instansi / Sub Unit</th>
+                  <th className="py-3.5 px-4 w-[33%] min-w-[260px]">Program & Kegiatan</th>
+                  <th className="py-3.5 px-4 w-[27%] min-w-[230px]">Kode & Nama Sub Kegiatan</th>
+                  <th className="py-3.5 px-4 w-[16%] min-w-[155px] text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
@@ -1106,16 +1231,16 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
                   return (
                     <tr
                       key={row.sipd_id}
-                      className="hover:bg-blue-50/35 transition-colors align-top"
+                      className="hover:bg-blue-50/35 transition-colors align-top group/row"
                     >
-                      <td className="py-3.5 px-3.5 text-center font-mono-tabular text-slate-400 font-semibold">
+                      <td className="py-4 px-3 text-center tabular-nums text-slate-400 font-bold">
                         {rowNum}
                       </td>
 
-                      {/* SKPD & Sub Unit */}
-                      <td className="py-3.5 px-3.5 space-y-1">
+                      {/* Kolom 1: Instansi / Sub Unit */}
+                      <td className="py-4 px-4 space-y-1.5">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-mono text-[10.5px] font-semibold">
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-mono text-[10.5px] font-semibold">
                             {row.kode_sub_unit || row.kode_skpd}
                           </span>
                           {row.is_custom && (
@@ -1129,111 +1254,126 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
                         </p>
                         {isDifferentSubUnit && (
                           <p className="text-[11px] text-slate-500 leading-snug">
-                            Induk: {row.nama_skpd}
+                            Induk: <span className="font-medium text-slate-700">{row.nama_skpd}</span>
                           </p>
                         )}
-                        <p className="text-[10.5px] text-slate-400">
+                        <p className="text-[10.5px] text-slate-400 leading-snug">
                           [{row.kode_bidang_urusan}] {row.nama_bidang_urusan}
                         </p>
                       </td>
 
-                      {/* Program */}
-                      <td className="py-3.5 px-3.5 space-y-1">
-                        <span className="inline-block px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-mono text-[10.5px] font-bold border border-indigo-200/60">
-                          {row.kode_program}
-                        </span>
-                        <p className="font-semibold text-slate-800 leading-snug">
-                          {row.nama_program}
-                        </p>
+                      {/* Kolom 2: Program & Kegiatan (Terstruktur 2 Tingkat) */}
+                      <td className="py-4 px-4 space-y-2.5">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">
+                              Program
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-mono text-[10.5px] font-bold border border-indigo-200/60">
+                              {row.kode_program}
+                            </span>
+                          </div>
+                          <p className="font-semibold text-slate-800 leading-snug">
+                            {row.nama_program}
+                          </p>
+                        </div>
+
+                        <div className="pl-2.5 border-l-2 border-emerald-200 space-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">
+                              Kegiatan
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-mono text-[10.5px] font-bold border border-emerald-200/60">
+                              {row.kode_kegiatan}
+                            </span>
+                          </div>
+                          <p className="text-slate-700 leading-snug">{row.nama_kegiatan}</p>
+                        </div>
                       </td>
 
-                      {/* Kegiatan */}
-                      <td className="py-3.5 px-3.5 space-y-1">
-                        <span className="inline-block px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-mono text-[10.5px] font-bold border border-emerald-200/60">
-                          {row.kode_kegiatan}
-                        </span>
-                        <p className="text-slate-700 leading-snug">{row.nama_kegiatan}</p>
-                      </td>
-
-                      {/* Kode Sub Kegiatan */}
-                      <td className="py-3.5 px-3.5">
-                        <button
-                          type="button"
-                          onClick={() => handleCopyCodeOnly(row)}
-                          title="Klik untuk menyalin Kode Sub Kegiatan"
-                          className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-[#2563EB] text-[#1D4ED8] hover:text-white border border-blue-200/80 font-mono-tabular text-xs font-extrabold transition-all cursor-pointer"
-                        >
-                          <span>{row.kode_sub_kegiatan}</span>
-                          {copiedId === `code-${row.sipd_id}` ? (
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 group-hover:text-white shrink-0" />
-                          ) : (
-                            <Copy className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100 shrink-0" />
-                          )}
-                        </button>
-                      </td>
-
-                      {/* Nama Sub Kegiatan */}
-                      <td className="py-3.5 px-3.5">
-                        <p className="font-bold text-slate-900 leading-relaxed">
+                      {/* Kolom 3: Kode & Nama Sub Kegiatan */}
+                      <td className="py-4 px-4 space-y-2">
+                        <div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyCodeOnly(row)}
+                            title="Klik untuk menyalin Kode Sub Kegiatan"
+                            className="group inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-[#2563EB] text-[#1D4ED8] hover:text-white border border-blue-200/80 font-mono text-xs font-extrabold transition-all cursor-pointer whitespace-nowrap"
+                          >
+                            <span>{row.kode_sub_kegiatan}</span>
+                            {copiedId === `code-${row.sipd_id}` ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-sans font-bold text-emerald-600 group-hover:text-white">
+                                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                                Tersalin
+                              </span>
+                            ) : (
+                              <Copy className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100 shrink-0" />
+                            )}
+                          </button>
+                        </div>
+                        <p className="font-bold text-slate-900 text-[13px] leading-snug">
                           {row.nama_sub_kegiatan}
                         </p>
                       </td>
 
-                      {/* Aksi Cepat */}
-                      <td className="py-3.5 px-3.5 text-right">
-                        <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                      {/* Kolom 4: Aksi Cepat */}
+                      <td className="py-4 px-4 text-right">
+                        <div className="flex flex-col items-end gap-2">
                           <button
                             type="button"
                             onClick={() => onUseSipdInMatrix(row)}
-                            className="px-2.5 py-1.5 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-[11px] font-bold inline-flex items-center gap-1 shadow-xs transition-all cursor-pointer"
+                            className="px-3 py-1.5 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-[11px] font-bold inline-flex items-center gap-1 shadow-xs transition-all cursor-pointer whitespace-nowrap shrink-0"
                             title="Gunakan Kode & Nomenklatur ini untuk Input Data Matriks"
                           >
                             <span>Pakai ke Matriks</span>
-                            <ArrowUpRight className="w-3.5 h-3.5" />
+                            <ArrowUpRight className="w-3.5 h-3.5 shrink-0" />
                           </button>
 
-                          <button
-                            type="button"
-                            onClick={() => handleCopyFullSipd(row)}
-                            className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
-                            title="Salin Lengkap (SKPD, Program, Kegiatan & Sub Kegiatan)"
-                          >
-                            {copiedId === `full-${row.sipd_id}` ? (
-                              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                            ) : (
-                              <Copy className="w-4 h-4" />
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setDetailItem(row)}
+                              className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold inline-flex items-center gap-1 transition-colors cursor-pointer"
+                              title="Lihat Detail 13 Kolom SIPD"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>Detail</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleCopyFullSipd(row)}
+                              className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+                              title="Salin Lengkap (SKPD, Program, Kegiatan & Sub Kegiatan)"
+                            >
+                              {copiedId === `full-${row.sipd_id}` ? (
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+
+                            {userRole === 'ADMIN' && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditModal(row)}
+                                  className="p-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 transition-colors cursor-pointer"
+                                  title="Edit Kode SIPD"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeletingItem(row)}
+                                  className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 transition-colors cursor-pointer"
+                                  title="Hapus Kode SIPD"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
                             )}
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => setDetailItem(row)}
-                            className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
-                            title="Lihat Detail 13 Kolom SIPD"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-
-                          {userRole === 'ADMIN' && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => handleOpenEditModal(row)}
-                                className="p-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-700 transition-colors cursor-pointer"
-                                title="Edit Kode SIPD"
-                              >
-                                <Edit3 className="w-4 h-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setDeletingItem(row)}
-                                className="p-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 transition-colors cursor-pointer"
-                                title="Hapus Kode SIPD"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </>
-                          )}
+                          </div>
                         </div>
                       </td>
                     </tr>
@@ -1247,15 +1387,15 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
           <div className="px-4 py-3.5 bg-[#F8FAFF] border-t border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
             <p className="text-slate-600">
               Menampilkan baris{' '}
-              <strong className="text-slate-900">
+              <strong className="text-slate-900 tabular-nums">
                 {formatNumber((currentPage - 1) * pageSize + 1)}
               </strong>{' '}
               –{' '}
-              <strong className="text-slate-900">
+              <strong className="text-slate-900 tabular-nums">
                 {formatNumber(Math.min(currentPage * pageSize, filteredRows.length))}
               </strong>{' '}
               dari total{' '}
-              <strong className="text-[#1D4ED8]">{formatNumber(filteredRows.length)}</strong> data
+              <strong className="text-[#1D4ED8] tabular-nums">{formatNumber(filteredRows.length)}</strong> data
             </p>
 
             <div className="flex items-center gap-1.5">
@@ -1263,13 +1403,13 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
                 type="button"
                 disabled={currentPage <= 1}
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold disabled:opacity-40 hover:bg-slate-50 flex items-center gap-1 cursor-pointer disabled:cursor-not-allowed"
+                className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold disabled:opacity-40 hover:bg-slate-50 inline-flex items-center gap-1 cursor-pointer disabled:cursor-not-allowed whitespace-nowrap"
               >
                 <ChevronLeft className="w-4 h-4" />
                 <span>Sebelumnya</span>
               </button>
 
-              <span className="px-3 py-1.5 rounded-xl bg-blue-50 text-[#1D4ED8] font-mono-tabular font-bold border border-blue-200/70">
+              <span className="px-3 py-1.5 rounded-xl bg-blue-50 text-[#1D4ED8] tabular-nums font-bold border border-blue-200/70 whitespace-nowrap">
                 Hal {currentPage} / {formatNumber(totalPages)}
               </span>
 
@@ -1277,7 +1417,7 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
                 type="button"
                 disabled={currentPage >= totalPages}
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold disabled:opacity-40 hover:bg-slate-50 flex items-center gap-1 cursor-pointer disabled:cursor-not-allowed"
+                className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold disabled:opacity-40 hover:bg-slate-50 inline-flex items-center gap-1 cursor-pointer disabled:cursor-not-allowed whitespace-nowrap"
               >
                 <span>Berikutnya</span>
                 <ChevronRight className="w-4 h-4" />
