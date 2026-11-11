@@ -98,6 +98,7 @@ export default function App() {
 
   // State UI (Sidebar Show/Hide, Dropdown Profil, Dropdown Notifikasi, Skeleton, Toast)
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
+  const [hoveredNavId, setHoveredNavId] = useState<NavTab | null>(null);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [notifMenuOpen, setNotifMenuOpen] = useState(false);
   const [isLoadingView, setIsLoadingView] = useState(false);
@@ -193,7 +194,18 @@ export default function App() {
     callback();
     setTimeout(() => {
       setIsLoadingView(false);
-    }, 180);
+    }, 240);
+  };
+
+  const handleSelectTab = (nextTab: NavTab) => {
+    if (nextTab === activeTab) return;
+    setProfileMenuOpen(false);
+    setNotifMenuOpen(false);
+    setIsLoadingView(true);
+    setActiveTab(nextTab);
+    setTimeout(() => {
+      setIsLoadingView(false);
+    }, 240);
   };
 
   // Handlers Autentikasi Login & Logout
@@ -531,29 +543,66 @@ export default function App() {
             )}
           </div>
 
-          {/* Daftar Menu Navigasi */}
+          {/* Daftar Menu Navigasi dengan Animasi Sliding Pill & Pop-out Tooltip (Dashboard V18) */}
           <nav className={`space-y-1.5 ${sidebarExpanded ? 'w-full' : 'w-full flex flex-col items-center'}`}>
             {sidebarNavItems.map((item) => {
               const isActive = activeTab === item.id;
+              const isHovered = hoveredNavId === item.id;
               return (
-                <button
+                <div
                   key={item.id}
-                  type="button"
-                  title={item.label}
-                  onClick={() => setActiveTab(item.id)}
-                  className={`flex items-center transition-all cursor-pointer ${
-                    sidebarExpanded
-                      ? 'w-full gap-3 px-4 py-3 rounded-2xl text-xs font-semibold'
-                      : 'w-12 h-12 justify-center rounded-2xl'
-                  } ${
-                    isActive
-                      ? 'bg-gradient-to-r from-[#2563EB] to-[#1D4ED8] text-white shadow-[0_8px_20px_-6px_rgba(37,99,235,0.55)]'
-                      : 'text-slate-600 hover:bg-white/80 hover:text-slate-900'
-                  }`}
+                  className={`relative ${sidebarExpanded ? 'w-full' : 'flex justify-center'}`}
+                  onMouseEnter={() => setHoveredNavId(item.id)}
+                  onMouseLeave={() => setHoveredNavId(null)}
                 >
-                  {item.icon}
-                  {sidebarExpanded && <span className="truncate">{item.label}</span>}
-                </button>
+                  <motion.button
+                    type="button"
+                    title={sidebarExpanded ? item.label : undefined}
+                    onClick={() => handleSelectTab(item.id)}
+                    whileHover={{ x: sidebarExpanded ? 4 : 0, scale: 1.03 }}
+                    whileTap={{ scale: 0.95 }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                    className={`relative flex items-center transition-colors cursor-pointer ${
+                      sidebarExpanded
+                        ? 'w-full gap-3 px-4 py-3 rounded-2xl text-xs font-semibold'
+                        : 'w-12 h-12 justify-center rounded-2xl'
+                    } ${
+                      isActive
+                        ? 'text-white'
+                        : 'text-slate-600 hover:bg-white/85 hover:text-slate-900'
+                    }`}
+                  >
+                    {isActive && (
+                      <motion.div
+                        layoutId="sidebarActivePill"
+                        transition={{ type: 'spring', stiffness: 380, damping: 28 }}
+                        className="absolute inset-0 rounded-2xl bg-gradient-to-r from-[#2563EB] to-[#1D4ED8] shadow-[0_8px_20px_-6px_rgba(37,99,235,0.6)]"
+                      />
+                    )}
+                    <span className="relative z-10 flex items-center justify-center shrink-0">
+                      {item.icon}
+                    </span>
+                    {sidebarExpanded && (
+                      <span className="relative z-10 truncate">{item.label}</span>
+                    )}
+                  </motion.button>
+
+                  {/* Floating Pill Tooltip saat Sidebar Di-minimize (Identik Dashboard V18) */}
+                  <AnimatePresence>
+                    {!sidebarExpanded && isHovered && (
+                      <motion.div
+                        initial={{ opacity: 0, x: -8, scale: 0.92 }}
+                        animate={{ opacity: 1, x: 0, scale: 1 }}
+                        exit={{ opacity: 0, x: -6, scale: 0.92 }}
+                        transition={{ type: 'spring', stiffness: 420, damping: 26 }}
+                        className="fixed left-[74px] z-50 px-3 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-bold shadow-lg whitespace-nowrap pointer-events-none flex items-center gap-1.5"
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                        <span>{item.label}</span>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               );
             })}
           </nav>
@@ -895,7 +944,7 @@ export default function App() {
         {/* Main Content Body (Di HP diberi ruang bawah pb-28 agar tidak tertutup Bottom Dock) */}
         <main className="flex-1 px-3.5 sm:px-6 lg:px-8 pb-28 md:pb-10 pt-1.5 sm:pt-2 w-full max-w-none">
           {isLoadingView ? (
-            <DashboardSkeleton />
+            <DashboardSkeleton activeTab={activeTab} />
           ) : (
             <AnimatePresence mode="wait">
               {activeTab === 'dashboard' && (
@@ -917,7 +966,7 @@ export default function App() {
                     })
                   }
                   onOpenInputModal={handleOpenInputModal}
-                  onNavigateTab={(t) => setActiveTab(t)}
+                  onNavigateTab={(t) => handleSelectTab(t)}
                 />
               )}
 
@@ -1049,25 +1098,29 @@ export default function App() {
           {sidebarNavItems.map((item) => {
             const isActive = activeTab === item.id;
             return (
-              <button
+              <motion.button
                 key={item.id}
                 type="button"
-                onClick={() => {
-                  setActiveTab(item.id);
-                  setProfileMenuOpen(false);
-                  setNotifMenuOpen(false);
-                }}
-                className={`flex-1 min-w-[60px] min-h-[56px] py-1.5 px-1.5 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all cursor-pointer active:scale-95 ${
+                whileTap={{ scale: 0.93 }}
+                onClick={() => handleSelectTab(item.id)}
+                className={`relative flex-1 min-w-[60px] min-h-[56px] py-1.5 px-1.5 rounded-2xl flex flex-col items-center justify-center gap-1 transition-colors cursor-pointer ${
                   isActive
-                    ? 'bg-gradient-to-b from-[#2563EB] to-[#1D4ED8] text-white shadow-[0_6px_16px_-4px_rgba(37,99,235,0.55)]'
+                    ? 'text-white'
                     : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900'
                 }`}
               >
-                {item.icon}
-                <span className="text-[11px] font-bold leading-none tracking-tight whitespace-nowrap">
+                {isActive && (
+                  <motion.div
+                    layoutId="mobileDockActivePill"
+                    transition={{ type: 'spring', stiffness: 380, damping: 28 }}
+                    className="absolute inset-0 rounded-2xl bg-gradient-to-b from-[#2563EB] to-[#1D4ED8] shadow-[0_6px_16px_-4px_rgba(37,99,235,0.55)]"
+                  />
+                )}
+                <span className="relative z-10">{item.icon}</span>
+                <span className="relative z-10 text-[11px] font-bold leading-none tracking-tight whitespace-nowrap">
                   {item.shortLabel}
                 </span>
-              </button>
+              </motion.button>
             );
           })}
 

@@ -758,9 +758,15 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
         </div>
       </div>
 
-      {/* 4 KARTU STATISTIK RINGKAS KODE SIPD */}
+      {/* 4 KARTU STATISTIK RINGKAS KODE SIPD (Animasi Hover Lift Dashboard V18) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs flex items-start justify-between gap-3">
+        <motion.div
+          initial={{ opacity: 0, y: 14, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          whileHover={{ y: -5, scale: 1.01 }}
+          transition={{ type: 'spring', stiffness: 340, damping: 22 }}
+          className="bg-white rounded-3xl border border-slate-200/80 hover:border-blue-300/80 p-4 shadow-xs hover:shadow-[0_18px_34px_-12px_rgba(37,99,235,0.16)] transition-shadow duration-300 flex items-start justify-between gap-3"
+        >
           <div>
             <p className="text-xs font-semibold text-slate-500">Master Sub Kegiatan Unik</p>
             <p className="text-2xl font-extrabold tabular-nums tracking-tight text-slate-900 mt-1">
@@ -773,9 +779,15 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
           <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#2563EB] flex items-center justify-center shrink-0">
             <BookOpen className="w-5 h-5" />
           </div>
-        </div>
+        </motion.div>
 
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs flex items-start justify-between gap-3">
+        <motion.div
+          initial={{ opacity: 0, y: 14, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          whileHover={{ y: -5, scale: 1.01 }}
+          transition={{ type: 'spring', stiffness: 340, damping: 22, delay: 0.04 }}
+          className="bg-white rounded-3xl border border-slate-200/80 hover:border-indigo-300/80 p-4 shadow-xs hover:shadow-[0_18px_34px_-12px_rgba(79,70,229,0.16)] transition-shadow duration-300 flex items-start justify-between gap-3"
+        >
           <div>
             <p className="text-xs font-semibold text-slate-500">Cakupan SKPD & Sub Unit</p>
             <p className="text-2xl font-extrabold tabular-nums tracking-tight text-slate-900 mt-1">
@@ -789,9 +801,15 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
           <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
             <Building2 className="w-5 h-5" />
           </div>
-        </div>
+        </motion.div>
 
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs flex items-start justify-between gap-3">
+        <motion.div
+          initial={{ opacity: 0, y: 14, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          whileHover={{ y: -5, scale: 1.01 }}
+          transition={{ type: 'spring', stiffness: 340, damping: 22, delay: 0.08 }}
+          className="bg-white rounded-3xl border border-slate-200/80 hover:border-emerald-300/80 p-4 shadow-xs hover:shadow-[0_18px_34px_-12px_rgba(16,185,129,0.16)] transition-shadow duration-300 flex items-start justify-between gap-3"
+        >
           <div>
             <p className="text-xs font-semibold text-slate-500">Total Program & Kegiatan</p>
             <p className="text-2xl font-extrabold tabular-nums tracking-tight text-slate-900 mt-1">
@@ -805,9 +823,15 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
           <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
             <Layers className="w-5 h-5" />
           </div>
-        </div>
+        </motion.div>
 
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs flex items-start justify-between gap-3">
+        <motion.div
+          initial={{ opacity: 0, y: 14, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          whileHover={{ y: -5, scale: 1.01 }}
+          transition={{ type: 'spring', stiffness: 340, damping: 22, delay: 0.12 }}
+          className="bg-white rounded-3xl border border-slate-200/80 hover:border-amber-300/80 p-4 shadow-xs hover:shadow-[0_18px_34px_-12px_rgba(245,158,11,0.16)] transition-shadow duration-300 flex items-start justify-between gap-3"
+        >
           <div>
             <p className="text-xs font-semibold text-slate-500">Nomenklatur Sub Kegiatan</p>
             <p className="text-2xl font-extrabold tabular-nums tracking-tight text-slate-900 mt-1">
@@ -820,7 +844,7 @@ export const KodeSipdView: React.FC<KodeSipdViewProps> = ({
           <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
             <CheckCircle2 className="w-5 h-5" />
           </div>
-        </div>
+        </motion.div>
       </div>
 
       {/* PANEL PENCARIAN & FILTER BERTINGKAT */}

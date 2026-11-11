@@ -368,21 +368,47 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       ? 'Selamat Datang di OPTIMIS (Optimalisasi Pelaksanaan Pengentasan Kemiskinan)'
       : `Selamat Datang di OPTIMIS — ${activeOpd.singkatan}`;
 
+  const bentoContainerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.065,
+        delayChildren: 0.02,
+      },
+    },
+  };
+
+  const bentoItemVariants = {
+    hidden: { opacity: 0, y: 18, scale: 0.97 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      scale: 1,
+      transition: {
+        type: 'spring' as const,
+        stiffness: 300,
+        damping: 24,
+      },
+    },
+  };
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+      variants={bentoContainerVariants}
+      initial="hidden"
+      animate="visible"
+      exit={{ opacity: 0, y: -8, transition: { duration: 0.16 } }}
       className="space-y-6"
     >
       {/* BARIS 1: Welcome Banner */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
         {/* Welcome Banner */}
         <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.04 }}
-          className="lg:col-span-12 rounded-2xl bg-gradient-to-r from-[#EAF2FF] via-[#DCE9FF] to-[#C7DFFF] border border-blue-200/70 shadow-[0_8px_25px_-6px_rgba(37,99,235,0.12)] relative overflow-hidden flex items-center min-h-[148px]"
+          variants={bentoItemVariants}
+          whileHover={{ y: -3 }}
+          transition={{ type: 'spring', stiffness: 320, damping: 24 }}
+          className="lg:col-span-12 rounded-3xl bg-gradient-to-r from-[#EAF2FF] via-[#DCE9FF] to-[#C7DFFF] border border-blue-200/70 shadow-[0_10px_28px_-8px_rgba(37,99,235,0.14)] hover:shadow-[0_18px_36px_-10px_rgba(37,99,235,0.2)] transition-shadow duration-300 relative overflow-hidden flex items-center min-h-[148px]"
         >
           {/* Gambar Banner Kabupaten Blora di Sisi Kanan Banner */}
           <div className="absolute inset-y-0 right-0 w-full sm:w-3/5 opacity-35 sm:opacity-100">
@@ -407,20 +433,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </motion.div>
       </div>
 
-      {/* BARIS 2: 4 Kartu KPI dengan Ilustrasi Gelombang Pastel (Sesuai Lampiran) */}
+      {/* BARIS 2: 4 Kartu KPI dengan Animasi Hover Lift (whileHover={{ y: -5 }}) Identik Dashboard V18 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
         {/* KPI 1: Total Alokasi Anggaran */}
         <motion.div
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          whileHover={{ y: -2 }}
-          className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-[0_8px_25px_-8px_rgba(15,23,42,0.05)] relative overflow-hidden flex items-start gap-4"
+          variants={bentoItemVariants}
+          whileHover={{ y: -5, scale: 1.01 }}
+          transition={{ type: 'spring', stiffness: 340, damping: 22 }}
+          className="bg-white rounded-3xl border border-slate-200/80 hover:border-blue-300/80 p-5 shadow-[0_8px_25px_-8px_rgba(15,23,42,0.05)] hover:shadow-[0_20px_38px_-14px_rgba(37,99,235,0.16)] transition-shadow duration-300 relative overflow-hidden flex items-start gap-4"
         >
           <CardWaveDecoration color="blue" />
-          <div className="w-12 h-12 rounded-2xl bg-blue-50 text-[#2563EB] flex items-center justify-center shrink-0">
+          <motion.div
+            whileHover={{ rotate: -6, scale: 1.08 }}
+            className="w-12 h-12 rounded-2xl bg-blue-50 text-[#2563EB] flex items-center justify-center shrink-0"
+          >
             <Users className="w-6 h-6" />
-          </div>
+          </motion.div>
           <div className="relative z-10 min-w-0">
             <p className="text-xs font-medium text-slate-500">Total Alokasi Anggaran</p>
             <div className="text-lg sm:text-xl font-bold text-slate-900 font-mono-tabular mt-1 truncate">
@@ -435,16 +463,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {/* KPI 2: Target Penerima Manfaat */}
         <motion.div
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.14 }}
-          whileHover={{ y: -2 }}
-          className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-[0_8px_25px_-8px_rgba(15,23,42,0.05)] relative overflow-hidden flex items-start gap-4"
+          variants={bentoItemVariants}
+          whileHover={{ y: -5, scale: 1.01 }}
+          transition={{ type: 'spring', stiffness: 340, damping: 22 }}
+          className="bg-white rounded-3xl border border-slate-200/80 hover:border-emerald-300/80 p-5 shadow-[0_8px_25px_-8px_rgba(15,23,42,0.05)] hover:shadow-[0_20px_38px_-14px_rgba(16,185,129,0.15)] transition-shadow duration-300 relative overflow-hidden flex items-start gap-4"
         >
           <CardWaveDecoration color="emerald" />
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+          <motion.div
+            whileHover={{ rotate: 6, scale: 1.08 }}
+            className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0"
+          >
             <Target className="w-6 h-6" />
-          </div>
+          </motion.div>
           <div className="relative z-10 min-w-0">
             <p className="text-xs font-medium text-slate-500">Target Penerima Manfaat</p>
             <div className="text-lg sm:text-xl font-bold text-slate-900 font-mono-tabular mt-1">
@@ -459,16 +489,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {/* KPI 3: Realisasi Semester 1 / 2 / Tahunan */}
         <motion.div
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.18 }}
-          whileHover={{ y: -2 }}
-          className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-[0_8px_25px_-8px_rgba(15,23,42,0.05)] relative overflow-hidden flex items-start gap-4"
+          variants={bentoItemVariants}
+          whileHover={{ y: -5, scale: 1.01 }}
+          transition={{ type: 'spring', stiffness: 340, damping: 22 }}
+          className="bg-white rounded-3xl border border-slate-200/80 hover:border-purple-300/80 p-5 shadow-[0_8px_25px_-8px_rgba(15,23,42,0.05)] hover:shadow-[0_20px_38px_-14px_rgba(147,51,234,0.15)] transition-shadow duration-300 relative overflow-hidden flex items-start gap-4"
         >
           <CardWaveDecoration color="purple" />
-          <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+          <motion.div
+            whileHover={{ rotate: -6, scale: 1.08 }}
+            className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0"
+          >
             <Coins className="w-6 h-6" />
-          </div>
+          </motion.div>
           <div className="relative z-10 min-w-0 flex-1">
             <p className="text-xs font-medium text-slate-500">
               {selectedSemesterFilter === 'S1'
@@ -482,9 +514,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
             <div className="flex items-center gap-2.5 mt-2.5">
               <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-[#2563EB] to-[#60A5FA] rounded-full transition-all duration-700"
-                  style={{ width: `${Math.min(100, stats.persentaseAktif)}%` }}
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${Math.min(100, stats.persentaseAktif)}%` }}
+                  transition={{ duration: 0.85, ease: [0.16, 1, 0.3, 1], delay: 0.2 }}
+                  className="h-full bg-gradient-to-r from-[#2563EB] to-[#60A5FA] rounded-full"
                 />
               </div>
               <span className="text-xs font-bold font-mono-tabular text-slate-800">
@@ -496,16 +530,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {/* KPI 4: Terverifikasi S1 / S2 */}
         <motion.div
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.22 }}
-          whileHover={{ y: -2 }}
-          className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-[0_8px_25px_-8px_rgba(15,23,42,0.05)] relative overflow-hidden flex items-start gap-4"
+          variants={bentoItemVariants}
+          whileHover={{ y: -5, scale: 1.01 }}
+          transition={{ type: 'spring', stiffness: 340, damping: 22 }}
+          className="bg-white rounded-3xl border border-slate-200/80 hover:border-amber-300/80 p-5 shadow-[0_8px_25px_-8px_rgba(15,23,42,0.05)] hover:shadow-[0_20px_38px_-14px_rgba(245,158,11,0.15)] transition-shadow duration-300 relative overflow-hidden flex items-start gap-4"
         >
           <CardWaveDecoration color="amber" />
-          <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+          <motion.div
+            whileHover={{ rotate: 6, scale: 1.08 }}
+            className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0"
+          >
             <ClipboardCheck className="w-6 h-6" />
-          </div>
+          </motion.div>
           <div className="relative z-10 min-w-0">
             <p className="text-xs font-medium text-slate-500">
               {selectedSemesterFilter === 'S2'
@@ -531,10 +567,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Panel Kiri: Overview & Grafik Analitik (8/12) */}
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.26 }}
-          className="lg:col-span-8 bg-white rounded-2xl border border-slate-200/80 p-6 shadow-[0_8px_25px_-8px_rgba(15,23,42,0.05)] flex flex-col justify-between"
+          variants={bentoItemVariants}
+          whileHover={{ y: -4 }}
+          transition={{ type: 'spring', stiffness: 320, damping: 24 }}
+          className="lg:col-span-8 bg-white rounded-3xl border border-slate-200/80 hover:border-blue-200 p-6 shadow-[0_8px_25px_-8px_rgba(15,23,42,0.05)] hover:shadow-[0_18px_36px_-12px_rgba(37,99,235,0.12)] transition-shadow duration-300 flex flex-col justify-between"
         >
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
             <div>
@@ -547,7 +583,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </p>
             </div>
 
-            {/* Pemilih Mode Grafik agar semua grafik analitik tetap dapat diakses */}
+            {/* Pemilih Mode Grafik dengan Animasi Sliding Pill */}
             <div className="flex flex-wrap items-center gap-1 bg-slate-100 p-1 rounded-xl">
               {[
                 { id: 'tren', label: 'Tren Realisasi' },
@@ -555,28 +591,44 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 { id: 'semester', label: 'S1 vs S2' },
                 { id: 'strategi', label: 'Strategi' },
                 { id: 'verifikasi', label: 'Verifikasi' },
-              ].map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() =>
-                    setChartTab(
-                      t.id as 'tren' | 'opd' | 'semester' | 'strategi' | 'verifikasi'
-                    )
-                  }
-                  className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-colors cursor-pointer ${
-                    chartTab === t.id
-                      ? 'bg-white text-[#2563EB] shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
+              ].map((t) => {
+                const isSelected = chartTab === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() =>
+                      setChartTab(
+                        t.id as 'tren' | 'opd' | 'semester' | 'strategi' | 'verifikasi'
+                      )
+                    }
+                    className={`relative px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-colors cursor-pointer ${
+                      isSelected
+                        ? 'text-[#2563EB]'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    {isSelected && (
+                      <motion.span
+                        layoutId="dashboardChartTabPill"
+                        transition={{ type: 'spring', stiffness: 380, damping: 28 }}
+                        className="absolute inset-0 bg-white rounded-lg shadow-xs"
+                      />
+                    )}
+                    <span className="relative z-10">{t.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          <div className="h-64 w-full">
+          <motion.div
+            key={chartTab}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.22 }}
+            className="h-64 w-full"
+          >
             <ResponsiveContainer width="100%" height="100%">
               {chartTab === 'tren' ? (
                 <AreaChart
@@ -706,15 +758,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </BarChart>
               )}
             </ResponsiveContainer>
-          </div>
+          </motion.div>
         </motion.div>
 
         {/* Panel Kanan: Recent Activity (4/12) Sesuai Lampiran */}
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="lg:col-span-4 bg-white rounded-2xl border border-slate-200/80 p-6 shadow-[0_8px_25px_-8px_rgba(15,23,42,0.05)] flex flex-col justify-between"
+          variants={bentoItemVariants}
+          whileHover={{ y: -4 }}
+          transition={{ type: 'spring', stiffness: 320, damping: 24 }}
+          className="lg:col-span-4 bg-white rounded-3xl border border-slate-200/80 hover:border-blue-200 p-6 shadow-[0_8px_25px_-8px_rgba(15,23,42,0.05)] hover:shadow-[0_18px_36px_-12px_rgba(37,99,235,0.12)] transition-shadow duration-300 flex flex-col justify-between"
         >
           <div>
             <div className="flex items-center justify-between mb-5">
@@ -758,7 +810,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 ][idx % 4];
 
                 return (
-                  <div key={log.log_id} className="relative flex items-start gap-3">
+                  <motion.div
+                    key={log.log_id}
+                    whileHover={{ x: 4 }}
+                    transition={{ type: 'spring', stiffness: 380, damping: 24 }}
+                    className="relative flex items-start gap-3"
+                  >
                     <span
                       className={`w-2 h-2 rounded-full ${palette.dot} mt-2.5 -ml-[3px] ring-4 ring-white shrink-0`}
                     />
@@ -775,7 +832,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         oleh {log.user_name} · {formatDateTimeID(log.created_at)}
                       </p>
                     </div>
-                  </div>
+                  </motion.div>
                 );
               })}
             </div>
@@ -787,10 +844,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Panel Kiri: Distribusi Data Donut Chart (4/12) */}
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.34 }}
-          className="lg:col-span-4 bg-white rounded-2xl border border-slate-200/80 p-6 shadow-[0_8px_25px_-8px_rgba(15,23,42,0.05)] flex flex-col justify-between"
+          variants={bentoItemVariants}
+          whileHover={{ y: -4 }}
+          transition={{ type: 'spring', stiffness: 320, damping: 24 }}
+          className="lg:col-span-4 bg-white rounded-3xl border border-slate-200/80 hover:border-blue-200 p-6 shadow-[0_8px_25px_-8px_rgba(15,23,42,0.05)] hover:shadow-[0_18px_36px_-12px_rgba(37,99,235,0.12)] transition-shadow duration-300 flex flex-col justify-between"
         >
           <div>
             <div className="flex items-center gap-2">
@@ -856,10 +913,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {/* Panel Kanan: Rekapitulasi per OPD / Subkegiatan (8/12) */}
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.38 }}
-          className="lg:col-span-8 bg-white rounded-2xl border border-slate-200/80 p-6 shadow-[0_8px_25px_-8px_rgba(15,23,42,0.05)] flex flex-col justify-between"
+          variants={bentoItemVariants}
+          whileHover={{ y: -4 }}
+          transition={{ type: 'spring', stiffness: 320, damping: 24 }}
+          className="lg:col-span-8 bg-white rounded-3xl border border-slate-200/80 hover:border-blue-200 p-6 shadow-[0_8px_25px_-8px_rgba(15,23,42,0.05)] hover:shadow-[0_18px_36px_-12px_rgba(37,99,235,0.12)] transition-shadow duration-300 flex flex-col justify-between"
         >
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
