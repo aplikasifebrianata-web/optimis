@@ -409,44 +409,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       ? 'Selamat Datang di OPTIMIS (Optimalisasi Pengentasan Kemiskinan)'
       : `Selamat Datang di OPTIMIS — ${activeOpd.singkatan}`;
 
-  const bentoContainerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.065,
-        delayChildren: 0.02,
-      },
-    },
-  };
-
-  const bentoItemVariants = {
-    hidden: { opacity: 0, y: 18, scale: 0.97 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      scale: 1,
-      transition: {
-        type: 'spring' as const,
-        stiffness: 300,
-        damping: 24,
-      },
-    },
-  };
-
   return (
-    <motion.div
-      variants={bentoContainerVariants}
-      initial="hidden"
-      animate="visible"
-      exit={{ opacity: 0, y: -8, transition: { duration: 0.16 } }}
-      className="space-y-6"
-    >
+    <div className="space-y-6">
       {/* BARIS 1: Welcome Banner */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
         {/* Welcome Banner */}
         <motion.div
-          variants={bentoItemVariants}
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
           whileHover={{ y: -3 }}
           transition={{ type: 'spring', stiffness: 320, damping: 24 }}
           className="lg:col-span-12 rounded-3xl bg-gradient-to-r from-[#EAF2FF] via-[#DCE9FF] to-[#C7DFFF] border border-blue-200/70 shadow-[0_10px_28px_-8px_rgba(37,99,235,0.14)] hover:shadow-[0_18px_36px_-10px_rgba(37,99,235,0.2)] transition-shadow duration-300 relative overflow-hidden flex items-center min-h-[148px]"
@@ -478,7 +448,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
         {/* KPI 1: Total Alokasi Anggaran */}
         <motion.div
-          variants={bentoItemVariants}
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
           whileHover={{ y: -5, scale: 1.01 }}
           transition={{ type: 'spring', stiffness: 340, damping: 22 }}
           className="bg-white rounded-3xl border border-slate-200/80 hover:border-blue-300/80 p-5 shadow-[0_8px_25px_-8px_rgba(15,23,42,0.05)] hover:shadow-[0_20px_38px_-14px_rgba(37,99,235,0.16)] transition-shadow duration-300 relative overflow-hidden flex items-start gap-4"
@@ -506,7 +477,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {/* KPI 2: Target Penerima Manfaat */}
         <motion.div
-          variants={bentoItemVariants}
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
           whileHover={{ y: -5, scale: 1.01 }}
           transition={{ type: 'spring', stiffness: 340, damping: 22 }}
           className="bg-white rounded-3xl border border-slate-200/80 hover:border-emerald-300/80 p-5 shadow-[0_8px_25px_-8px_rgba(15,23,42,0.05)] hover:shadow-[0_20px_38px_-14px_rgba(16,185,129,0.15)] transition-shadow duration-300 relative overflow-hidden flex items-start gap-4"
@@ -534,7 +506,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {/* KPI 3: Realisasi Semester 1 / 2 / Tahunan */}
         <motion.div
-          variants={bentoItemVariants}
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
           whileHover={{ y: -5, scale: 1.01 }}
           transition={{ type: 'spring', stiffness: 340, damping: 22 }}
           className="bg-white rounded-3xl border border-slate-200/80 hover:border-purple-300/80 p-5 shadow-[0_8px_25px_-8px_rgba(15,23,42,0.05)] hover:shadow-[0_20px_38px_-14px_rgba(147,51,234,0.15)] transition-shadow duration-300 relative overflow-hidden flex items-start gap-4"
@@ -575,7 +548,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {/* KPI 4: Terverifikasi S1 / S2 */}
         <motion.div
-          variants={bentoItemVariants}
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
           whileHover={{ y: -5, scale: 1.01 }}
           transition={{ type: 'spring', stiffness: 340, damping: 22 }}
           className="bg-white rounded-3xl border border-slate-200/80 hover:border-amber-300/80 p-5 shadow-[0_8px_25px_-8px_rgba(15,23,42,0.05)] hover:shadow-[0_20px_38px_-14px_rgba(245,158,11,0.15)] transition-shadow duration-300 relative overflow-hidden flex items-start gap-4"
@@ -612,7 +586,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Panel Kiri: Overview & Grafik Analitik (8/12) */}
         <motion.div
-          variants={bentoItemVariants}
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
           whileHover={{ y: -4 }}
           transition={{ type: 'spring', stiffness: 320, damping: 24 }}
           className="lg:col-span-8 bg-white rounded-3xl border border-slate-200/80 hover:border-blue-200 p-6 shadow-[0_8px_25px_-8px_rgba(15,23,42,0.05)] hover:shadow-[0_18px_36px_-12px_rgba(37,99,235,0.12)] transition-shadow duration-300 flex flex-col justify-between"
@@ -808,7 +783,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {/* Panel Kanan: Recent Activity (4/12) Sesuai Lampiran */}
         <motion.div
-          variants={bentoItemVariants}
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
           whileHover={{ y: -4 }}
           transition={{ type: 'spring', stiffness: 320, damping: 24 }}
           className="lg:col-span-4 bg-white rounded-3xl border border-slate-200/80 hover:border-blue-200 p-6 shadow-[0_8px_25px_-8px_rgba(15,23,42,0.05)] hover:shadow-[0_18px_36px_-12px_rgba(37,99,235,0.12)] transition-shadow duration-300 flex flex-col justify-between"
@@ -898,7 +874,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Panel Kiri: Distribusi Data Donut Chart (4/12) */}
         <motion.div
-          variants={bentoItemVariants}
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
           whileHover={{ y: -4 }}
           transition={{ type: 'spring', stiffness: 320, damping: 24 }}
           className="lg:col-span-4 bg-white rounded-3xl border border-slate-200/80 hover:border-blue-200 p-6 shadow-[0_8px_25px_-8px_rgba(15,23,42,0.05)] hover:shadow-[0_18px_36px_-12px_rgba(37,99,235,0.12)] transition-shadow duration-300 flex flex-col justify-between"
@@ -967,7 +944,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {/* Panel Kanan: Rekapitulasi per OPD / Subkegiatan (8/12) */}
         <motion.div
-          variants={bentoItemVariants}
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
           whileHover={{ y: -4 }}
           transition={{ type: 'spring', stiffness: 320, damping: 24 }}
           className="lg:col-span-8 bg-white rounded-3xl border border-slate-200/80 hover:border-blue-200 p-6 shadow-[0_8px_25px_-8px_rgba(15,23,42,0.05)] hover:shadow-[0_18px_36px_-12px_rgba(37,99,235,0.12)] transition-shadow duration-300 flex flex-col justify-between"
@@ -1105,6 +1083,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </motion.div>
       </div>
-    </motion.div>
+    </div>
   );
 };

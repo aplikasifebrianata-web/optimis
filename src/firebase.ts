@@ -1,4 +1,4 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import {
   getAuth,
   GoogleAuthProvider,
@@ -10,6 +10,7 @@ import {
   onAuthStateChanged,
   setPersistence,
   inMemoryPersistence,
+  Auth,
   User,
 } from 'firebase/auth';
 import {
@@ -88,18 +89,32 @@ export const firebaseConfig = {
   firestoreDatabaseId: resolvedDatabaseId,
 };
 
-export const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const app: FirebaseApp =
+  getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+
+export const db =
+  firebaseConfig.firestoreDatabaseId &&
+  firebaseConfig.firestoreDatabaseId !== '(default)'
+    ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+    : getFirestore(app);
+
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
-// Secondary Firebase App instance khusus untuk mendaftarkan/menyinkronkan akun OPD ke Firebase Authentication
-// tanpa mengubah atau memutus sesi login Admin pada instance auth utama.
-const provisionerApp = initializeApp(firebaseConfig, 'OptimisUserProvisioner');
-const provisionerAuth = getAuth(provisionerApp);
-void setPersistence(provisionerAuth, inMemoryPersistence).catch(() => {
-  // ignore persistence error
-});
+// Secondary Firebase App instance diinisialisasi secara lazy hanya saat Admin menyinkronkan akun OPD
+let cachedProvisionerAuth: Auth | null = null;
+function getProvisionerAuth(): Auth {
+  if (cachedProvisionerAuth) return cachedProvisionerAuth;
+  const appName = 'OptimisUserProvisioner';
+  const existing = getApps().find((a) => a.name === appName);
+  const provApp = existing || initializeApp(firebaseConfig, appName);
+  const provAuth = getAuth(provApp);
+  void setPersistence(provAuth, inMemoryPersistence).catch(() => {
+    // ignore persistence error
+  });
+  cachedProvisionerAuth = provAuth;
+  return provAuth;
+}
 
 export {
   signInWithPopup,
@@ -115,7 +130,7 @@ export type { User };
  * Normalisasi password untuk Firebase Auth (minimal 6 karakter sesuai ketentuan Firebase Auth)
  */
 export function normalizeFirebaseAuthPassword(rawPassword: string): string {
-  const clean = rawPassword.trim();
+  const clean = String(rawPassword || '').trim();
   if (clean.length >= 6) return clean;
   return `${clean}123456`.slice(0, 6);
 }
@@ -132,8 +147,9 @@ export async function provisionFirebaseEmailAccount(
   email: string;
   error?: string;
 }> {
-  const cleanEmail = email.trim().toLowerCase();
+  const cleanEmail = String(email || '').trim().toLowerCase();
   const fbPassword = normalizeFirebaseAuthPassword(rawPassword);
+  const provisionerAuth = getProvisionerAuth();
   try {
     await createUserWithEmailAndPassword(
       provisionerAuth,
@@ -156,7 +172,6 @@ export async function provisionFirebaseEmailAccount(
       return { status: 'exists', email: cleanEmail };
     }
 
-    // Jika terkena rate limit sementara dari Firebase Auth, tunggu sejenak lalu coba sekali lagi
     if (
       code === 'auth/too-many-requests' ||
       msg.includes('too-many-requests')
@@ -191,7 +206,7 @@ export async function syncFirebaseEmailAuth(
   email: string,
   rawPassword: string
 ): Promise<User | null> {
-  const cleanEmail = email.trim().toLowerCase();
+  const cleanEmail = String(email || '').trim().toLowerCase();
   const fbPassword = normalizeFirebaseAuthPassword(rawPassword);
   try {
     const cred = await signInWithEmailAndPassword(auth, cleanEmail, fbPassword);

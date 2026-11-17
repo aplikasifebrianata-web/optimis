@@ -58,7 +58,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
   };
 
   return (
-    <div className="min-h-screen w-full relative flex flex-col items-center justify-between p-4 sm:p-6 lg:p-10 overflow-hidden select-none">
+    <div className="min-h-screen w-full relative flex flex-col items-center justify-between p-4 sm:p-6 lg:p-10 overflow-hidden select-none bg-gradient-to-br from-[#0F2547] via-[#1E40AF] to-[#3898FF]">
       {/* Latar Belakang Pemandangan Alam Blora Sesuai Lampiran */}
       <div
         className="fixed inset-0 bg-cover bg-center bg-no-repeat scale-[1.01]"

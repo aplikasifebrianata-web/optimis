@@ -68,6 +68,18 @@ const FALLBACK_EMPTY_OPD: OPD = {
   kepala_opd: '-',
 };
 
+const FALLBACK_DEFAULT_PERIODE: PeriodePelaporan = {
+  periode_id: 'per-2026',
+  tahun: 2026,
+  nama_periode: 'Tahun Anggaran 2026',
+  semester_1_buka: true,
+  semester_2_buka: true,
+  batas_semester_1: '2026-07-15',
+  batas_semester_2: '2027-01-15',
+  is_active: true,
+  updated_at: '2026-01-01T00:00:00.000Z',
+};
+
 export default function App() {
   const [refreshTick, setRefreshTick] = useState(0);
   const allUsers = useMemo(() => DatabaseService.getUsersList(), [refreshTick]);
@@ -83,7 +95,7 @@ export default function App() {
   const allOpds: OPD[] = useMemo(() => DatabaseService.getOpdList(), [refreshTick]);
   const [activePeriodeId, setActivePeriodeId] = useState<string>(() => {
     const list = DatabaseService.getPeriodeList();
-    const active = list.find((p) => p.is_active) || list[0];
+    const active = list.find((p) => p.is_active) || list[0] || FALLBACK_DEFAULT_PERIODE;
     return active.periode_id;
   });
   const [selectedSemesterFilter, setSelectedSemesterFilter] = useState<
@@ -154,7 +166,11 @@ export default function App() {
   };
 
   const activePeriode = useMemo(() => {
-    return periodes.find((p) => p.periode_id === activePeriodeId) || periodes[0];
+    return (
+      periodes.find((p) => p.periode_id === activePeriodeId) ||
+      periodes[0] ||
+      FALLBACK_DEFAULT_PERIODE
+    );
   }, [periodes, activePeriodeId]);
 
   const userRole = currentUser?.role || 'OPD';
@@ -918,10 +934,14 @@ export default function App() {
           {isLoadingView ? (
             <DashboardSkeleton activeTab={activeTab} />
           ) : (
-            <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.22 }}
+            >
               {activeTab === 'dashboard' && (
                 <DashboardView
-                  key="dashboard"
                   rows={enrichedRows}
                   allRowsForRecap={allRowsForRecap}
                   allOpds={allOpds}
@@ -944,7 +964,6 @@ export default function App() {
 
               {activeTab === 'matriks' && (
                 <MatriksTableView
-                  key="matriks"
                   rows={enrichedRows}
                   allOpds={allOpds}
                   activePeriode={activePeriode}
@@ -970,7 +989,6 @@ export default function App() {
 
               {activeTab === 'verifikasi' && (
                 <VerificationView
-                  key="verifikasi"
                   rows={enrichedRows}
                   allOpds={allOpds}
                   activePeriode={activePeriode}
@@ -982,7 +1000,6 @@ export default function App() {
 
               {activeTab === 'laporan-export' && (
                 <ReportsExportView
-                  key="laporan-export"
                   rows={enrichedRows}
                   allOpds={allOpds}
                   activePeriode={activePeriode}
@@ -994,7 +1011,6 @@ export default function App() {
 
               {activeTab === 'kode-sipd' && (
                 <KodeSipdView
-                  key="kode-sipd"
                   allOpds={allOpds}
                   activeOpd={activeOpd}
                   userRole={userRole}
@@ -1005,7 +1021,6 @@ export default function App() {
 
               {activeTab === 'manajemen-user' && userRole === 'ADMIN' && (
                 <UserManagementView
-                  key="manajemen-user"
                   users={allUsers}
                   onSaveUser={(params) => {
                     const res = DatabaseService.saveUserAccount({
@@ -1038,7 +1053,6 @@ export default function App() {
               {(activeTab === 'pengaturan-periode' ||
                 activeTab === 'audit-log') && (
                 <SystemGovernanceView
-                  key={activeTab}
                   mode={activeTab}
                   periodes={periodes}
                   activePeriode={activePeriode}
@@ -1056,7 +1070,7 @@ export default function App() {
                   onResetDatabase={handleResetDatabase}
                 />
               )}
-            </AnimatePresence>
+            </motion.div>
           )}
         </main>
       </div>

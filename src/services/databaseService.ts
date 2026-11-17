@@ -71,8 +71,8 @@ if (typeof window !== 'undefined') {
 /**
  * Pembentuk format email standar autentikasi user: [namaopd]@oppkpke.com
  */
-export function formatOpdEmail(usernameOrEmail: string): string {
-  const clean = usernameOrEmail.trim().toLowerCase();
+export function formatOpdEmail(usernameOrEmail?: string | null): string {
+  const clean = String(usernameOrEmail || '').trim().toLowerCase();
   if (!clean) return 'opd@oppkpke.com';
   const localPart = clean
     .split('@')[0]
@@ -89,7 +89,12 @@ function loadTable<T>(key: string, fallback: T[]): T[] {
       localStorage.setItem(key, JSON.stringify(fallback));
       return fallback;
     }
-    return JSON.parse(raw) as T[];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      localStorage.setItem(key, JSON.stringify(fallback));
+      return fallback;
+    }
+    return parsed.filter((item) => item !== null && item !== undefined) as T[];
   } catch {
     return fallback;
   }
@@ -887,20 +892,53 @@ export class DatabaseService {
 
   static getUsersList(): AuthUser[] {
     const rawUsers = loadTable<AuthUser>(STORAGE_KEYS.USERS, SEED_USERS);
-    return rawUsers.map((u) => ({
-      ...u,
-      email: formatOpdEmail(u.email || u.username),
-    }));
+    const validUsers = rawUsers
+      .filter((u) => u && typeof u === 'object' && Boolean(u.username || u.email))
+      .map((u) => {
+        const uname = String(u.username || 'opd');
+        return {
+          ...u,
+          user_id: String(u.user_id || `usr-${uname}`),
+          username: uname,
+          email: formatOpdEmail(u.email || uname),
+          display_name: String(u.display_name || uname),
+          instansi_label: String(u.instansi_label || uname.toUpperCase()),
+          instansi_lengkap: String(u.instansi_lengkap || u.display_name || uname),
+        };
+      });
+    if (validUsers.length === 0) {
+      return SEED_USERS;
+    }
+    return validUsers;
   }
 
   static getCurrentSessionUser(): AuthUser | null {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.SESSION_USER);
       if (!raw) return null;
-      const parsed = JSON.parse(raw) as AuthUser;
+      const parsed = JSON.parse(raw) as Partial<AuthUser> | null;
+      if (
+        !parsed ||
+        typeof parsed !== 'object' ||
+        typeof parsed.username !== 'string' ||
+        !parsed.username.trim()
+      ) {
+        localStorage.removeItem(STORAGE_KEYS.SESSION_USER);
+        return null;
+      }
+      const uname = parsed.username.trim();
       return {
-        ...parsed,
-        email: formatOpdEmail(parsed.email || parsed.username),
+        user_id: String(parsed.user_id || `usr-${uname}`),
+        username: uname,
+        email: formatOpdEmail(parsed.email || uname),
+        password_hint: String(parsed.password_hint || ''),
+        role: parsed.role === 'ADMIN' ? 'ADMIN' : 'OPD',
+        opd_id: parsed.opd_id ?? null,
+        kategori: parsed.kategori || (parsed.role === 'ADMIN' ? 'Admin' : 'OPD/Dinas/Badan'),
+        display_name: String(parsed.display_name || uname),
+        instansi_label: String(parsed.instansi_label || uname.toUpperCase()),
+        instansi_lengkap: String(parsed.instansi_lengkap || parsed.display_name || uname),
+        jabatan: String(parsed.jabatan || ''),
       };
     } catch {
       return null;
