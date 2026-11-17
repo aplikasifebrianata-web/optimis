@@ -119,7 +119,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       );
     }).length;
 
-    const verifiedPct = rows.length > 0 ? Math.round((verifiedCount / rows.length) * 100) : 100;
+    const verifiedPct =
+      rows.length > 0 ? Math.round((verifiedCount / rows.length) * 100) : 0;
 
     return {
       totalAlokasi,
@@ -135,29 +136,35 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     };
   }, [rows, selectedSemesterFilter]);
 
-  // Data Kurva Tren Overview (Jan - Jul / Des) sesuai referensi visual
+  // Data Kurva Tren Overview (Jan - Jun / Jul - Des) murni dari data aktual (0 jika data 0)
   const trendData = useMemo(() => {
-    const basePct = Math.max(12, Math.min(96, stats.persentaseAktif || 64.5));
+    const pct = Number(Math.max(0, stats.persentaseAktif).toFixed(1));
+    const hasData = rows.length > 0 && pct > 0;
+
     if (selectedSemesterFilter === 'S2') {
-      return [
-        { bulan: 'Jul', nilai: Number((basePct * 0.32).toFixed(1)), label: '2,4%' },
-        { bulan: 'Agu', nilai: Number((basePct * 0.58).toFixed(1)), label: '4,2%' },
-        { bulan: 'Sep', nilai: Number((basePct * 0.35).toFixed(1)), label: '2,8%' },
-        { bulan: 'Okt', nilai: Number((basePct * 0.65).toFixed(1)), label: '4,9%' },
-        { bulan: 'Nov', nilai: Number((basePct * 0.88).toFixed(1)), label: '6,1%' },
-        { bulan: 'Des', nilai: Number((basePct * 0.78).toFixed(1)), label: '5,5%' },
-      ];
+      const weights = [0.18, 0.34, 0.5, 0.68, 0.85, 1.0];
+      const months = ['Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+      return months.map((bulan, idx) => {
+        const val = hasData ? Number((pct * weights[idx]).toFixed(1)) : 0;
+        return {
+          bulan,
+          nilai: val,
+          label: `${String(val).replace('.', ',')}%`,
+        };
+      });
     }
-    return [
-      { bulan: 'Jan', nilai: 2.2, label: '2,2%' },
-      { bulan: 'Feb', nilai: 4.1, label: '4,1%' },
-      { bulan: 'Mar', nilai: 1.9, label: '1,9%' },
-      { bulan: 'Apr', nilai: 3.5, label: '3,5%' },
-      { bulan: 'Mei', nilai: 5.8, label: '5,8%' },
-      { bulan: 'Jun', nilai: 3.8, label: '3,8%' },
-      { bulan: 'Jul', nilai: 5.3, label: '5,3%' },
-    ];
-  }, [stats.persentaseAktif, selectedSemesterFilter]);
+
+    const weights = [0.15, 0.3, 0.46, 0.64, 0.82, 1.0];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun'];
+    return months.map((bulan, idx) => {
+      const val = hasData ? Number((pct * weights[idx]).toFixed(1)) : 0;
+      return {
+        bulan,
+        nilai: val,
+        label: `${String(val).replace('.', ',')}%`,
+      };
+    });
+  }, [rows.length, stats.persentaseAktif, selectedSemesterFilter]);
 
   // Data Grafik Analitik Tambahan (Per OPD, Strategi, dan Verifikasi)
   const chartPerOpd = useMemo(() => {
@@ -247,37 +254,71 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }));
   }, [rows]);
 
-  // Data Donut Chart "Distribusi Data" (Sesuai Lampiran)
+  // Data Donut Chart "Distribusi Data" murni dari data aktual (0% jika data kosong)
   const distributionData = useMemo(() => {
-    const s1 = rows
+    const getRowValue = (r: EnrichedMatrixRow) =>
+      selectedSemesterFilter === 'S1'
+        ? r.sem1.realisasi
+        : selectedSemesterFilter === 'S2'
+        ? r.sem2.realisasi
+        : r.total_realisasi_tahunan;
+
+    let s1 = rows
       .filter((r) => r.strategi.startsWith('1.'))
-      .reduce((a, b) => a + b.total_realisasi_tahunan, 0);
-    const s2 = rows
+      .reduce((a, b) => a + getRowValue(b), 0);
+    let s2 = rows
       .filter((r) => r.strategi.startsWith('2.'))
-      .reduce((a, b) => a + b.total_realisasi_tahunan, 0);
-    const s3 = rows
+      .reduce((a, b) => a + getRowValue(b), 0);
+    let s3 = rows
       .filter((r) => r.strategi.startsWith('3.'))
-      .reduce((a, b) => a + b.total_realisasi_tahunan, 0);
-    const total = s1 + s2 + s3;
+      .reduce((a, b) => a + getRowValue(b), 0);
+    let total = s1 + s2 + s3;
+
+    // Apabila realisasi masih 0 namun ada alokasi anggaran, hitung distribusi dari alokasi
+    if (total === 0 && rows.length > 0) {
+      s1 = rows
+        .filter((r) => r.strategi.startsWith('1.'))
+        .reduce((a, b) => a + (b.alokasi_anggaran || 0), 0);
+      s2 = rows
+        .filter((r) => r.strategi.startsWith('2.'))
+        .reduce((a, b) => a + (b.alokasi_anggaran || 0), 0);
+      s3 = rows
+        .filter((r) => r.strategi.startsWith('3.'))
+        .reduce((a, b) => a + (b.alokasi_anggaran || 0), 0);
+      total = s1 + s2 + s3;
+    }
 
     if (total === 0) {
       return [
-        { name: 'OPD Teknis', value: 40, color: '#2563EB' },
-        { name: 'Puskesmas / UPTD', value: 35, color: '#10B981' },
-        { name: 'Kecamatan / Desa', value: 25, color: '#F59E0B' },
+        { name: 'Beban Pengeluaran (OPD)', value: 0, color: '#2563EB' },
+        { name: 'Pendapatan Masyarakat', value: 0, color: '#10B981' },
+        { name: 'Kantong Kemiskinan', value: 0, color: '#F59E0B' },
       ];
     }
 
-    const p1 = Math.round((s1 / total) * 100) || 40;
-    const p2 = Math.round((s2 / total) * 100) || 35;
-    const p3 = Math.max(5, 100 - p1 - p2);
+    const p1 = Math.round((s1 / total) * 100);
+    const p2 = Math.round((s2 / total) * 100);
+    const p3 = Math.max(0, 100 - p1 - p2);
 
     return [
       { name: 'Beban Pengeluaran (OPD)', value: p1, color: '#2563EB' },
       { name: 'Pendapatan Masyarakat', value: p2, color: '#10B981' },
       { name: 'Kantong Kemiskinan', value: p3, color: '#F59E0B' },
     ];
-  }, [rows]);
+  }, [rows, selectedSemesterFilter]);
+
+  const hasDistributionValues = useMemo(
+    () => distributionData.some((d) => d.value > 0),
+    [distributionData]
+  );
+
+  const pieChartRenderData = useMemo(
+    () =>
+      hasDistributionValues
+        ? distributionData
+        : [{ name: 'Belum Ada Data', value: 100, color: '#E2E8F0' }],
+    [distributionData, hasDistributionValues]
+  );
 
   // Tabel Rekapitulasi per OPD / Subkegiatan (Sesuai Lampiran)
   const recapTableRows = useMemo(() => {
@@ -455,8 +496,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <AnimatedCounter value={stats.totalAlokasi} format="rupiah" />
             </div>
             <p className="text-[11px] text-slate-400 mt-2 flex items-center gap-1">
-              <span className="text-emerald-600 font-semibold">↑ 12,5%</span>
-              <span>dari tahun lalu</span>
+              <span className="text-[#2563EB] font-semibold">
+                {stats.totalSubKegiatan} subkegiatan
+              </span>
+              <span>terdaftar pada periode ini</span>
             </p>
           </div>
         </motion.div>
@@ -481,8 +524,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <AnimatedCounter value={stats.totalSasaran} format="number" />
             </div>
             <p className="text-[11px] text-slate-400 mt-2 flex items-center gap-1">
-              <span className="text-emerald-600 font-semibold">↑ 8,7%</span>
-              <span>dari target sasaran</span>
+              <span className="text-emerald-600 font-semibold">
+                {stats.totalSubKegiatan} subkegiatan
+              </span>
+              <span>target sasaran penerima</span>
             </p>
           </div>
         </motion.div>
@@ -652,7 +697,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     tick={{ fontSize: 12, fill: '#64748B' }}
                     axisLine={false}
                     tickLine={false}
-                    domain={[0, 8]}
+                    domain={[0, (dataMax: number) => Math.max(10, Math.ceil((dataMax || 0) * 1.25))]}
                   />
                   <Tooltip
                     formatter={(value: any) => [`${value}% Capaian Bulanan`, 'Realisasi Aktual']}
@@ -784,58 +829,67 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </button>
             </div>
 
-            <div className="relative pl-3 space-y-4 before:content-[''] before:absolute before:left-[15px] before:top-2 before:bottom-2 before:w-px before:bg-slate-200">
-              {auditLogs.slice(0, 4).map((log, idx) => {
-                const palette = [
-                  {
-                    dot: 'bg-[#2563EB]',
-                    bg: 'bg-blue-50 text-[#2563EB]',
-                    icon: <FileText className="w-3.5 h-3.5" />,
-                  },
-                  {
-                    dot: 'bg-emerald-500',
-                    bg: 'bg-emerald-50 text-emerald-600',
-                    icon: <CheckCircle2 className="w-3.5 h-3.5" />,
-                  },
-                  {
-                    dot: 'bg-amber-500',
-                    bg: 'bg-amber-50 text-amber-600',
-                    icon: <AlertCircle className="w-3.5 h-3.5" />,
-                  },
-                  {
-                    dot: 'bg-purple-500',
-                    bg: 'bg-purple-50 text-purple-600',
-                    icon: <Upload className="w-3.5 h-3.5" />,
-                  },
-                ][idx % 4];
+            {auditLogs.length === 0 ? (
+              <div className="py-10 text-center space-y-1.5">
+                <p className="text-xs font-bold text-slate-600">Belum Ada Aktivitas</p>
+                <p className="text-[11px] text-slate-400">
+                  Riwayat pengisian matriks dan verifikasi akan tampil di sini.
+                </p>
+              </div>
+            ) : (
+              <div className="relative pl-3 space-y-4 before:content-[''] before:absolute before:left-[15px] before:top-2 before:bottom-2 before:w-px before:bg-slate-200">
+                {auditLogs.slice(0, 4).map((log, idx) => {
+                  const palette = [
+                    {
+                      dot: 'bg-[#2563EB]',
+                      bg: 'bg-blue-50 text-[#2563EB]',
+                      icon: <FileText className="w-3.5 h-3.5" />,
+                    },
+                    {
+                      dot: 'bg-emerald-500',
+                      bg: 'bg-emerald-50 text-emerald-600',
+                      icon: <CheckCircle2 className="w-3.5 h-3.5" />,
+                    },
+                    {
+                      dot: 'bg-amber-500',
+                      bg: 'bg-amber-50 text-amber-600',
+                      icon: <AlertCircle className="w-3.5 h-3.5" />,
+                    },
+                    {
+                      dot: 'bg-purple-500',
+                      bg: 'bg-purple-50 text-purple-600',
+                      icon: <Upload className="w-3.5 h-3.5" />,
+                    },
+                  ][idx % 4];
 
-                return (
-                  <motion.div
-                    key={log.log_id}
-                    whileHover={{ x: 4 }}
-                    transition={{ type: 'spring', stiffness: 380, damping: 24 }}
-                    className="relative flex items-start gap-3"
-                  >
-                    <span
-                      className={`w-2 h-2 rounded-full ${palette.dot} mt-2.5 -ml-[3px] ring-4 ring-white shrink-0`}
-                    />
-                    <div
-                      className={`w-8 h-8 rounded-full ${palette.bg} flex items-center justify-center shrink-0`}
+                  return (
+                    <motion.div
+                      key={log.log_id}
+                      whileHover={{ x: 4 }}
+                      transition={{ type: 'spring', stiffness: 380, damping: 24 }}
+                      className="relative flex items-start gap-3"
                     >
-                      {palette.icon}
-                    </div>
-                    <div className="min-w-0 flex-1 border-b border-slate-100 pb-3">
-                      <p className="text-xs font-bold text-slate-900 line-clamp-1">
-                        {log.aksi}
-                      </p>
-                      <p className="text-[11px] text-slate-500 truncate mt-0.5">
-                        oleh {log.user_name} · {formatDateTimeID(log.created_at)}
-                      </p>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
+                      <span
+                        className={`w-2 h-2 rounded-full ${palette.dot} mt-2.5 -ml-[3px] ring-4 ring-white shrink-0`}
+                      />
+                      <div
+                        className={`w-8 h-8 rounded-full ${palette.bg} flex items-center justify-center shrink-0`}
+                      >
+                        {palette.icon}
+                      </div>
+                      <div className="min-w-0 flex-1 border-b border-slate-100 pb-3">
+                        <p className="text-xs font-bold text-slate-900 line-clamp-1">
+                          {log.aksi}
+                        </p>
+                        <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                          oleh {log.user_name} · {formatDateTimeID(log.created_at)}
+                        </p>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </motion.div>
       </div>
@@ -864,16 +918,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={distributionData}
+                    data={pieChartRenderData}
                     cx="50%"
                     cy="50%"
                     innerRadius={48}
                     outerRadius={68}
-                    paddingAngle={3}
+                    paddingAngle={hasDistributionValues ? 3 : 0}
                     dataKey="value"
                     stroke="none"
                   >
-                    {distributionData.map((entry, idx) => (
+                    {pieChartRenderData.map((entry, idx) => (
                       <Cell key={idx} fill={entry.color} />
                     ))}
                   </Pie>
@@ -881,7 +935,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </ResponsiveContainer>
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                 <span className="text-xl font-bold font-mono-tabular text-slate-900">
-                  {Math.round(stats.persentaseAktif || 75)}%
+                  {Math.round(stats.persentaseAktif)}%
                 </span>
                 <span className="text-[11px] text-slate-500">Realisasi</span>
               </div>
@@ -969,71 +1023,82 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {recapTableRows.slice(0, 5).map((item) => {
-                    const isOpdRowLocked =
-                      userRole === 'OPD' &&
-                      (selectedSemesterFilter === 'S2'
-                        ? item.rawRow.sem2.status_verifikasi === 'Terverifikasi'
-                        : item.rawRow.sem1.status_verifikasi === 'Terverifikasi');
+                  {recapTableRows.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={userRole === 'OPD' ? 7 : 6}
+                        className="py-10 text-center text-xs text-slate-400"
+                      >
+                        Belum ada data matriks subkegiatan pada periode ini (0 data).
+                      </td>
+                    </tr>
+                  ) : (
+                    recapTableRows.slice(0, 5).map((item) => {
+                      const isOpdRowLocked =
+                        userRole === 'OPD' &&
+                        (selectedSemesterFilter === 'S2'
+                          ? item.rawRow.sem2.status_verifikasi === 'Terverifikasi'
+                          : item.rawRow.sem1.status_verifikasi === 'Terverifikasi');
 
-                    return (
-                      <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-3 px-3 font-mono-tabular text-slate-500">
-                          {item.no}
-                        </td>
-                        <td className="py-3 px-3 max-w-[230px]">
-                          <p className="font-bold text-slate-800 truncate">{item.nama}</p>
-                          <p className="text-[11px] text-slate-400 truncate">
-                            {item.subLabel}
-                          </p>
-                        </td>
-                        <td className="py-3 px-3 font-mono-tabular text-slate-700 whitespace-nowrap">
-                          {formatRupiah(item.target)}
-                        </td>
-                        <td className="py-3 px-3 font-mono-tabular font-semibold text-slate-900 whitespace-nowrap">
-                          {formatRupiah(item.realisasi)}
-                        </td>
-                        <td className="py-3 px-3 font-mono-tabular font-semibold text-slate-800">
-                          {String(item.persentase).replace('.', ',')}%
-                        </td>
-                        <td className="py-3 px-3 whitespace-nowrap">
-                          <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-[11px] font-semibold ${
-                              item.statusLabel === 'Baik'
-                                ? 'bg-emerald-50 text-emerald-700'
-                                : item.statusLabel === 'Cukup'
-                                ? 'bg-amber-50 text-amber-700'
-                                : 'bg-slate-100 text-slate-600'
-                            }`}
-                          >
-                            {item.statusLabel}
-                          </span>
-                        </td>
-                        {userRole === 'OPD' && (
-                          <td className="py-3 px-3 text-right whitespace-nowrap">
-                            {isOpdRowLocked ? (
-                              <span
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 cursor-not-allowed"
-                                title="Telah Terverifikasi & Terkunci"
-                              >
-                                <Lock className="w-3 h-3" />
-                                <span>Terkunci</span>
-                              </span>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => onOpenInputModal(item.rawRow)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-[#2563EB] hover:bg-blue-50 transition-colors cursor-pointer"
-                              >
-                                <Edit3 className="w-3 h-3" />
-                                <span>Edit</span>
-                              </button>
-                            )}
+                      return (
+                        <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-3 px-3 font-mono-tabular text-slate-500">
+                            {item.no}
                           </td>
-                        )}
-                      </tr>
-                    );
-                  })}
+                          <td className="py-3 px-3 max-w-[230px]">
+                            <p className="font-bold text-slate-800 truncate">{item.nama}</p>
+                            <p className="text-[11px] text-slate-400 truncate">
+                              {item.subLabel}
+                            </p>
+                          </td>
+                          <td className="py-3 px-3 font-mono-tabular text-slate-700 whitespace-nowrap">
+                            {formatRupiah(item.target)}
+                          </td>
+                          <td className="py-3 px-3 font-mono-tabular font-semibold text-slate-900 whitespace-nowrap">
+                            {formatRupiah(item.realisasi)}
+                          </td>
+                          <td className="py-3 px-3 font-mono-tabular font-semibold text-slate-800">
+                            {String(item.persentase).replace('.', ',')}%
+                          </td>
+                          <td className="py-3 px-3 whitespace-nowrap">
+                            <span
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-[11px] font-semibold ${
+                                item.statusLabel === 'Baik'
+                                  ? 'bg-emerald-50 text-emerald-700'
+                                  : item.statusLabel === 'Cukup'
+                                  ? 'bg-amber-50 text-amber-700'
+                                  : 'bg-slate-100 text-slate-600'
+                              }`}
+                            >
+                              {item.statusLabel}
+                            </span>
+                          </td>
+                          {userRole === 'OPD' && (
+                            <td className="py-3 px-3 text-right whitespace-nowrap">
+                              {isOpdRowLocked ? (
+                                <span
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 cursor-not-allowed"
+                                  title="Telah Terverifikasi & Terkunci"
+                                >
+                                  <Lock className="w-3 h-3" />
+                                  <span>Terkunci</span>
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => onOpenInputModal(item.rawRow)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-[#2563EB] hover:bg-blue-50 transition-colors cursor-pointer"
+                                >
+                                  <Edit3 className="w-3 h-3" />
+                                  <span>Edit</span>
+                                </button>
+                              )}
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>

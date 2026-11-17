@@ -500,29 +500,29 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-[#F3F6FD] text-slate-900 flex overflow-x-hidden">
-      {/* LEFT SIDEBAR (Desktop & Tablet >= md): Di HP otomatis pindah ke Bottom Dock */}
+    <div className="min-h-screen w-full bg-[#F3F6FD] text-slate-900 flex">
+      {/* LEFT SIDEBAR (Desktop & Tablet >= md): Fixed agar selalu terlihat meskipun halaman di-scroll ke bawah */}
       <aside
-        className={`hidden md:flex sticky top-0 inset-y-0 left-0 z-40 h-screen bg-gradient-to-b from-[#F4F8FF] via-[#F7FAFF] to-[#EBF2FF] border-r border-slate-200/80 flex-col justify-between transition-all duration-200 ease-out overflow-hidden shrink-0 ${
+        className={`hidden md:flex fixed top-0 bottom-0 left-0 z-40 h-screen bg-gradient-to-b from-[#F4F8FF] via-[#F7FAFF] to-[#EBF2FF] border-r border-slate-200/80 flex-col justify-between transition-all duration-200 ease-out overflow-hidden shrink-0 ${
           sidebarExpanded ? 'w-64' : 'w-20'
         }`}
       >
         {/* Siluet Halus Tugu Blora di bagian bawah sidebar (tampil saat sidebar terbuka penuh) */}
         {sidebarExpanded && (
-          <div className="absolute bottom-28 inset-x-0 pointer-events-none">
+          <div className="absolute bottom-20 inset-x-0 pointer-events-none">
             <SidebarMonumentSilhouette />
           </div>
         )}
 
         {/* Bagian Atas Sidebar: Logo Pemkab Blora + Nama Aplikasi OPTIMIS + Menu Navigasi */}
         <div
-          className={`relative z-10 flex flex-col ${
+          className={`relative z-10 flex flex-col flex-1 min-h-0 ${
             sidebarExpanded ? 'p-5 space-y-6 w-64' : 'py-5 px-2.5 space-y-6 w-20 items-center'
           }`}
         >
           {/* Identitas Logo Pemkab Blora & OPTIMIS */}
           <div
-            className={`flex items-center ${
+            className={`flex items-center shrink-0 ${
               sidebarExpanded ? 'gap-3' : 'justify-center w-full'
             }`}
             title="OPTIMIS (Optimalisasi Pengentasan Kemiskinan)"
@@ -544,7 +544,11 @@ export default function App() {
           </div>
 
           {/* Daftar Menu Navigasi dengan Animasi Sliding Pill & Pop-out Tooltip (Dashboard V18) */}
-          <nav className={`space-y-1.5 ${sidebarExpanded ? 'w-full' : 'w-full flex flex-col items-center'}`}>
+          <nav
+            className={`space-y-1.5 overflow-y-auto no-scrollbar ${
+              sidebarExpanded ? 'w-full' : 'w-full flex flex-col items-center'
+            }`}
+          >
             {sidebarNavItems.map((item) => {
               const isActive = activeTab === item.id;
               const isHovered = hoveredNavId === item.id;
@@ -608,64 +612,32 @@ export default function App() {
           </nav>
         </div>
 
-        {/* Bagian Bawah Sidebar: Kartu Hak Akses (saat terbuka), Tombol/Icon Keluar, dan Tombol Hamburger Show/Hide di Paling Bawah */}
+        {/* Bagian Bawah Sidebar: Ikon Hamburger Show/Hide Saja (Tanpa Teks "Sembunyikan Menu") */}
         <div
-          className={`relative z-10 ${
+          className={`relative z-10 shrink-0 ${
             sidebarExpanded
-              ? 'p-4 space-y-2.5 w-64'
-              : 'py-4 px-2.5 space-y-2.5 w-20 flex flex-col items-center'
+              ? 'p-4 w-64 flex items-center justify-center'
+              : 'py-4 px-2.5 w-20 flex flex-col items-center'
           }`}
         >
-          {sidebarExpanded && (
-            <div className="p-3.5 rounded-2xl bg-white/90 backdrop-blur-xs border border-slate-200/80 shadow-[0_4px_15px_-4px_rgba(15,23,42,0.05)] space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-medium text-slate-400">
-                  {userRole === 'ADMIN' ? 'Hak Akses Admin' : 'Hak Akses OPD'}
-                </span>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-bold">
-                  • Aktif
-                </span>
-              </div>
-              <p className="text-xs font-bold text-slate-900 truncate">
-                {currentUser.display_name}
-              </p>
-              <p className="text-[11px] text-slate-500 leading-snug line-clamp-2">
-                {currentUser.instansi_lengkap}
-              </p>
-            </div>
-          )}
-
-          {/* Tombol Keluar (Saat di-hide hanya muncul icon keluar) */}
-          <button
-            type="button"
-            onClick={handleLogout}
-            title="Keluar Sistem"
-            className={`rounded-2xl bg-rose-50/90 hover:bg-rose-100 border border-rose-200/60 text-rose-600 text-xs font-semibold flex items-center justify-center transition-colors cursor-pointer ${
-              sidebarExpanded ? 'w-full py-2.5 px-4 gap-2' : 'w-12 h-12'
-            }`}
-          >
-            <LogOut className="w-5 h-5 shrink-0" />
-            {sidebarExpanded && <span>Keluar Sistem</span>}
-          </button>
-
-          {/* Tombol Hamburger Show/Hide di Sidebar Bawah */}
           <button
             type="button"
             onClick={handleToggleSidebar}
             title={sidebarExpanded ? 'Sembunyikan Sidebar' : 'Tampilkan Sidebar'}
             aria-label="Toggle Sidebar"
-            className={`rounded-2xl bg-white hover:bg-blue-50 border border-slate-200/90 hover:border-blue-200 text-slate-700 hover:text-[#2563EB] text-xs font-semibold flex items-center justify-center shadow-xs transition-all cursor-pointer ${
-              sidebarExpanded ? 'w-full py-2.5 px-4 gap-2' : 'w-12 h-12'
-            }`}
+            className="w-12 h-12 rounded-2xl bg-white hover:bg-blue-50 border border-slate-200/90 hover:border-blue-200 text-slate-700 hover:text-[#2563EB] flex items-center justify-center shadow-xs transition-all cursor-pointer"
           >
             <Menu className="w-5 h-5 shrink-0" />
-            {sidebarExpanded && <span>Sembunyikan Menu</span>}
           </button>
         </div>
       </aside>
 
-      {/* MAIN CONTENT VIEWPORT (Fleksibel & Dinamis Mengikuti Ukuran Layar) */}
-      <div className="flex-1 min-w-0 w-full flex flex-col">
+      {/* MAIN CONTENT VIEWPORT (Menyesuaikan Lebar Sidebar Fixed Secara Dinamis) */}
+      <div
+        className={`flex-1 min-w-0 w-full flex flex-col transition-all duration-200 ease-out ${
+          sidebarExpanded ? 'md:pl-64' : 'md:pl-20'
+        }`}
+      >
         {/* Top Context Header */}
         <header className="w-full px-3.5 sm:px-6 lg:px-8 pt-3.5 sm:pt-5 pb-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
           {/* Baris Identitas Khusus Layar HP (< md): Logo Blora + OPTIMIS di Kiri, Status + Notifikasi + Profil di Kanan */}
