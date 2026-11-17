@@ -723,7 +723,7 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                   <h2 className="text-lg font-bold text-slate-900 mt-0.5 line-clamp-1">
                     {subKegiatan.trim()
                       ? subKegiatan
-                      : 'Formulir Popout Matriks OPTIMIS (Optimalisasi Pelaksanaan Pengentasan Kemiskinan)'}
+                      : 'Formulir Popout Matriks OPTIMIS (Optimalisasi Pengentasan Kemiskinan)'}
                   </h2>
                 </div>
               </div>

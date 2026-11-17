@@ -525,7 +525,7 @@ export default function App() {
             className={`flex items-center ${
               sidebarExpanded ? 'gap-3' : 'justify-center w-full'
             }`}
-            title="OPTIMIS (Optimalisasi Pelaksanaan Pengentasan Kemiskinan)"
+            title="OPTIMIS (Optimalisasi Pengentasan Kemiskinan)"
           >
             <BloraShieldLogo className="w-11 h-11 shrink-0" />
             {sidebarExpanded && (
@@ -535,9 +535,9 @@ export default function App() {
                 </p>
                 <p
                   className="text-[10.5px] font-semibold text-[#2563EB] leading-snug line-clamp-2"
-                  title="Optimalisasi Pelaksanaan Pengentasan Kemiskinan"
+                  title="Optimalisasi Pengentasan Kemiskinan"
                 >
-                  Optimalisasi Pelaksanaan Pengentasan Kemiskinan
+                  Optimalisasi Pengentasan Kemiskinan
                 </p>
               </div>
             )}

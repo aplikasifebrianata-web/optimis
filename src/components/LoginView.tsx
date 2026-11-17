@@ -103,7 +103,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
               OPTIMIS
             </h1>
             <p className="text-base sm:text-[19px] font-bold text-[#0F2547] tracking-tight leading-snug">
-              (Optimalisasi Pelaksanaan Pengentasan Kemiskinan)
+              (Optimalisasi Pengentasan Kemiskinan)
             </p>
 
             {/* Garis Aksen Biru */}

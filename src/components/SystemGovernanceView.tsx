@@ -360,7 +360,7 @@ export const SystemGovernanceView: React.FC<SystemGovernanceViewProps> = ({
               Jejak Audit & Histori Perubahan Per Semester
             </p>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-              Riwayat & Audit Log OPTIMIS (Optimalisasi Pelaksanaan Pengentasan Kemiskinan)
+              Riwayat & Audit Log OPTIMIS (Optimalisasi Pengentasan Kemiskinan)
             </h1>
             <p className="text-xs text-slate-500 mt-1">
               Seluruh aktivitas pengisian OPD, perubahan anggaran, pengajuan realisasi Semester 1 dan Semester 2, serta keputusan verifikator tercatat secara kronologis.

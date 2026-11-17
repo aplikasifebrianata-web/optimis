@@ -164,7 +164,7 @@ export const ReportsExportView: React.FC<ReportsExportViewProps> = ({
             Pusat Pelaporan & Ekspor Matriks Excel · {activePeriode.nama_periode}
           </p>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            Laporan & Export Excel OPTIMIS (Optimalisasi Pelaksanaan Pengentasan Kemiskinan)
+            Laporan & Export Excel OPTIMIS (Optimalisasi Pengentasan Kemiskinan)
           </h1>
           <p className="text-xs text-slate-500 mt-1">
             Seluruh hasil export sesuai dengan data aktual di database, mempertahankan urutan kolom matriks Excel asli dengan penambahan kolom Realisasi Semester 2.
