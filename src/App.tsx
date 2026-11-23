@@ -113,6 +113,16 @@ export default function App() {
   const [hoveredNavId, setHoveredNavId] = useState<NavTab | null>(null);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [notifMenuOpen, setNotifMenuOpen] = useState(false);
+  const [seenNotifIds, setSeenNotifIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('e_oppkpke_blora_seen_notifs_v1');
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
   const [isLoadingView, setIsLoadingView] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
@@ -204,6 +214,27 @@ export default function App() {
     }
     return logs;
   }, [userRole, activeOpd.opd_id, refreshTick]);
+
+  const unreadNotifCount = useMemo(() => {
+    const seenSet = new Set(seenNotifIds);
+    return auditLogs.filter((l) => !seenSet.has(l.log_id)).length;
+  }, [auditLogs, seenNotifIds]);
+
+  const handleToggleNotifMenu = () => {
+    setNotifMenuOpen((prev) => !prev);
+    setProfileMenuOpen(false);
+    if (auditLogs.length > 0) {
+      setSeenNotifIds((prev) => {
+        const merged = Array.from(new Set([...prev, ...auditLogs.map((l) => l.log_id)]));
+        try {
+          localStorage.setItem('e_oppkpke_blora_seen_notifs_v1', JSON.stringify(merged));
+        } catch {
+          // ignore storage error
+        }
+        return merged;
+      });
+    }
+  };
 
   const triggerSmoothReload = (callback: () => void) => {
     setIsLoadingView(true);
@@ -683,17 +714,16 @@ export default function App() {
               {/* Lonceng Notifikasi di HP */}
               <button
                 type="button"
-                onClick={() => {
-                  setNotifMenuOpen(!notifMenuOpen);
-                  setProfileMenuOpen(false);
-                }}
+                onClick={handleToggleNotifMenu}
                 className="w-10 h-10 rounded-xl bg-white border border-slate-200/90 shadow-xs flex items-center justify-center text-slate-700 active:scale-95 transition-all cursor-pointer relative"
                 aria-label="Notifikasi Aktivitas"
               >
                 <Bell className="w-5 h-5" />
-                <span className="absolute -top-1 -right-1 w-4.5 h-4.5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-[#F3F6FD]">
-                  {Math.min(9, auditLogs.length)}
-                </span>
+                {unreadNotifCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4.5 h-4.5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-[#F3F6FD]">
+                    {Math.min(9, unreadNotifCount)}
+                  </span>
+                )}
               </button>
 
               {/* Profil di HP */}
@@ -790,17 +820,16 @@ export default function App() {
             <div className="relative">
               <button
                 type="button"
-                onClick={() => {
-                  setNotifMenuOpen(!notifMenuOpen);
-                  setProfileMenuOpen(false);
-                }}
+                onClick={handleToggleNotifMenu}
                 className="hidden md:flex w-11 h-11 rounded-2xl bg-white border border-slate-200/80 shadow-xs items-center justify-center text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer relative"
                 aria-label="Notifikasi Aktivitas"
               >
                 <Bell className="w-5 h-5" />
-                <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-[#F3F6FD]">
-                  {Math.min(9, auditLogs.length)}
-                </span>
+                {unreadNotifCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-[#F3F6FD]">
+                    {Math.min(9, unreadNotifCount)}
+                  </span>
+                )}
               </button>
 
               <AnimatePresence>
