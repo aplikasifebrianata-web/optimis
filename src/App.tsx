@@ -21,6 +21,7 @@ import {
   Users,
   Calendar,
   BookOpen,
+  Trash2,
 } from 'lucide-react';
 import {
   AuditLog,
@@ -123,6 +124,16 @@ export default function App() {
       return [];
     }
   });
+  const [clearedNotifIds, setClearedNotifIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('e_oppkpke_blora_cleared_notifs_v1');
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
   const [isLoadingView, setIsLoadingView] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
@@ -215,10 +226,15 @@ export default function App() {
     return logs;
   }, [userRole, activeOpd.opd_id, refreshTick]);
 
+  const visibleNotifLogs = useMemo(() => {
+    const clearedSet = new Set(clearedNotifIds);
+    return auditLogs.filter((l) => !clearedSet.has(l.log_id));
+  }, [auditLogs, clearedNotifIds]);
+
   const unreadNotifCount = useMemo(() => {
     const seenSet = new Set(seenNotifIds);
-    return auditLogs.filter((l) => !seenSet.has(l.log_id)).length;
-  }, [auditLogs, seenNotifIds]);
+    return visibleNotifLogs.filter((l) => !seenSet.has(l.log_id)).length;
+  }, [visibleNotifLogs, seenNotifIds]);
 
   const handleToggleNotifMenu = () => {
     setNotifMenuOpen((prev) => !prev);
@@ -234,6 +250,29 @@ export default function App() {
         return merged;
       });
     }
+  };
+
+  const handleClearNotifications = () => {
+    if (auditLogs.length === 0) return;
+    const allIds = auditLogs.map((l) => l.log_id);
+    setClearedNotifIds((prev) => {
+      const merged = Array.from(new Set([...prev, ...allIds]));
+      try {
+        localStorage.setItem('e_oppkpke_blora_cleared_notifs_v1', JSON.stringify(merged));
+      } catch {
+        // ignore storage error
+      }
+      return merged;
+    });
+    setSeenNotifIds((prev) => {
+      const merged = Array.from(new Set([...prev, ...allIds]));
+      try {
+        localStorage.setItem('e_oppkpke_blora_seen_notifs_v1', JSON.stringify(merged));
+      } catch {
+        // ignore storage error
+      }
+      return merged;
+    });
   };
 
   const triggerSmoothReload = (callback: () => void) => {
@@ -840,38 +879,65 @@ export default function App() {
                     exit={{ opacity: 0, y: 6, scale: 0.96 }}
                     className="fixed inset-x-3 top-16 md:absolute md:inset-x-auto md:right-0 md:top-auto md:mt-2 md:w-80 bg-white rounded-2xl border border-slate-200 shadow-2xl p-4 z-50 space-y-3"
                   >
-                    <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-100">
                       <span className="text-xs font-bold text-slate-900">
                         Notifikasi Sistem Terbaru
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setNotifMenuOpen(false);
-                          setActiveTab('audit-log');
-                        }}
-                        className="text-xs font-semibold text-[#2563EB] hover:underline cursor-pointer"
-                      >
-                        Lihat Semua
-                      </button>
+                      <div className="flex items-center gap-2.5">
+                        {visibleNotifLogs.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={handleClearNotifications}
+                            className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-2 py-1 rounded-lg transition-colors cursor-pointer"
+                            title="Bersihkan seluruh daftar notifikasi"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Clear Notifikasi</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNotifMenuOpen(false);
+                            setActiveTab('audit-log');
+                          }}
+                          className="text-xs font-semibold text-[#2563EB] hover:underline cursor-pointer"
+                        >
+                          Lihat Semua
+                        </button>
+                      </div>
                     </div>
                     <div className="space-y-2.5 max-h-64 overflow-y-auto">
-                      {auditLogs.slice(0, 4).map((log) => (
-                        <div
-                          key={log.log_id}
-                          className="p-3 rounded-xl bg-[#F8FAFF] border border-slate-100 text-xs space-y-1"
-                        >
-                          <p className="font-semibold text-slate-800 line-clamp-1">
-                            {log.aksi}
+                      {visibleNotifLogs.length === 0 ? (
+                        <div className="py-6 px-3 text-center space-y-1.5">
+                          <div className="w-9 h-9 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
+                            <CheckCircle2 className="w-4.5 h-4.5" />
+                          </div>
+                          <p className="text-xs font-bold text-slate-700">
+                            Tidak Ada Notifikasi
                           </p>
-                          <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
-                            {log.detail_perubahan}
-                          </p>
-                          <p className="text-[11px] text-slate-400 pt-0.5">
-                            {formatDateTimeID(log.created_at)}
+                          <p className="text-[11px] text-slate-400 leading-relaxed">
+                            Seluruh log notifikasi telah dibersihkan.
                           </p>
                         </div>
-                      ))}
+                      ) : (
+                        visibleNotifLogs.slice(0, 4).map((log) => (
+                          <div
+                            key={log.log_id}
+                            className="p-3 rounded-xl bg-[#F8FAFF] border border-slate-100 text-xs space-y-1"
+                          >
+                            <p className="font-semibold text-slate-800 line-clamp-1">
+                              {log.aksi}
+                            </p>
+                            <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
+                              {log.detail_perubahan}
+                            </p>
+                            <p className="text-[11px] text-slate-400 pt-0.5">
+                              {formatDateTimeID(log.created_at)}
+                            </p>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </motion.div>
                 )}
