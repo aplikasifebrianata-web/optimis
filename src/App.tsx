@@ -580,7 +580,7 @@ export default function App() {
       : []),
     {
       id: 'audit-log',
-      label: 'Riwayat & Audit Log',
+      label: 'Riwayat',
       shortLabel: 'Riwayat',
       icon: <History className="w-5 h-5 shrink-0" />,
     },
@@ -609,7 +609,7 @@ export default function App() {
       if (activeTab === 'verifikasi') return 'Verifikasi';
       if (activeTab === 'laporan-export') return 'Laporan';
       if (activeTab === 'pengaturan-periode') return 'Pengaturan Periode';
-      if (activeTab === 'audit-log') return 'Riwayat & Audit Log';
+      if (activeTab === 'audit-log') return 'Riwayat';
       if (activeTab === 'kode-sipd') return 'Kode SIPD';
       if (activeTab === 'manajemen-user') return 'Manajemen User';
       return 'Dashboard';
