@@ -128,13 +128,259 @@ function saveTable<T>(key: string, data: T[], fromRemote = false): void {
 let pendingAuthPromise: Promise<User | null> | null = null;
 let hasTriggeredInitialCloudSeed = false;
 
+// Pelacak penulisan aktif (in-flight) & timestamp lokal agar snapshot lama tidak pernah menimpa/mengembalikan progres baru
+const pendingMatrixWrites = new Map<string, MatrixData>();
+const pendingRealisasiWrites = new Map<string, RealisasiSemester>();
+const pendingDeletedMatrixIds = new Set<string>();
+const pendingDeletedRealisasiIds = new Set<string>();
+const recentLocalMatrixWriteMs = new Map<string, number>();
+const recentLocalRealisasiWriteMs = new Map<string, number>();
+const knownCloudDocPaths = new Set<string>();
+
+function extractFirestoreIso(
+  tsField: unknown,
+  strField: unknown,
+  fallbackIso = '2026-01-01T00:00:00.000Z'
+): string {
+  if (
+    tsField &&
+    typeof (tsField as { toDate?: () => Date }).toDate === 'function'
+  ) {
+    try {
+      return (tsField as { toDate: () => Date }).toDate().toISOString();
+    } catch {
+      // fall through
+    }
+  }
+  if (typeof strField === 'string' && strField.trim()) {
+    return strField;
+  }
+  return fallbackIso;
+}
+
+function mergeMatricesWithLocal(remoteItems: MatrixData[]): MatrixData[] {
+  const localItems = loadTable<MatrixData>(STORAGE_KEYS.MATRIX, []);
+  const localMap = new Map<string, MatrixData>();
+  localItems.forEach((m) => {
+    if (m && m.matrix_id) localMap.set(m.matrix_id, m);
+  });
+
+  const nowMs = Date.now();
+  const mergedMap = new Map<string, MatrixData>();
+
+  remoteItems.forEach((remote) => {
+    const id = remote.matrix_id;
+    if (!id || pendingDeletedMatrixIds.has(id)) return;
+    knownCloudDocPaths.add(`matrices/${id}`);
+
+    const pending = pendingMatrixWrites.get(id);
+    if (pending) {
+      mergedMap.set(id, pending);
+      return;
+    }
+
+    const local = localMap.get(id);
+    if (local) {
+      const recentWriteAt = recentLocalMatrixWriteMs.get(id) || 0;
+      const localMs = Date.parse(local.updated_at || '') || 0;
+      const remoteMs = Date.parse(remote.updated_at || '') || 0;
+
+      // Jika data lokal baru saja disimpan (< 20 detik) atau memiliki timestamp lebih baru, pertahankan data lokal
+      if (nowMs - recentWriteAt < 20000 || localMs > remoteMs + 1000) {
+        mergedMap.set(id, {
+          ...remote,
+          ...local,
+          keterangan_durasi_bantuan:
+            local.keterangan_durasi_bantuan || remote.keterangan_durasi_bantuan || '',
+          aktivitas_real_langsung_sem2:
+            local.aktivitas_real_langsung_sem2 ?? remote.aktivitas_real_langsung_sem2 ?? '',
+          aktivitas_real_tidak_langsung_sem2:
+            local.aktivitas_real_tidak_langsung_sem2 ??
+            remote.aktivitas_real_tidak_langsung_sem2 ??
+            '',
+          aktivitas_real_penunjang_sem2:
+            local.aktivitas_real_penunjang_sem2 ?? remote.aktivitas_real_penunjang_sem2 ?? '',
+          alokasi_anggaran_perubahan:
+            local.alokasi_anggaran_perubahan ?? remote.alokasi_anggaran_perubahan ?? 0,
+          sumber_pembiayaan_perubahan:
+            local.sumber_pembiayaan_perubahan || remote.sumber_pembiayaan_perubahan || '',
+          sifat_bantuan_sem2:
+            local.sifat_bantuan_sem2 || remote.sifat_bantuan_sem2 || '',
+          lokasi_sem2: local.lokasi_sem2 ?? remote.lokasi_sem2 ?? '',
+          jumlah_sasaran_sem2:
+            local.jumlah_sasaran_sem2 ?? remote.jumlah_sasaran_sem2 ?? 0,
+          satuan_sasaran_sem2:
+            local.satuan_sasaran_sem2 || remote.satuan_sasaran_sem2 || 'KPM',
+          keterangan_sasaran_sem2:
+            local.keterangan_sasaran_sem2 ?? remote.keterangan_sasaran_sem2 ?? '',
+          besaran_manfaat_sem2:
+            local.besaran_manfaat_sem2 ?? remote.besaran_manfaat_sem2 ?? '',
+          jenis_bantuan_sem2:
+            local.jenis_bantuan_sem2 ?? remote.jenis_bantuan_sem2 ?? '',
+          durasi_pemberian_bantuan_sem2:
+            local.durasi_pemberian_bantuan_sem2 ??
+            remote.durasi_pemberian_bantuan_sem2 ??
+            '',
+          keterangan_durasi_bantuan_sem2:
+            local.keterangan_durasi_bantuan_sem2 ??
+            remote.keterangan_durasi_bantuan_sem2 ??
+            '',
+        });
+        return;
+      }
+      // Pertahankan field tambahan lokal bila remote belum menyimpannya
+      mergedMap.set(id, {
+        ...remote,
+        keterangan_durasi_bantuan:
+          remote.keterangan_durasi_bantuan || local.keterangan_durasi_bantuan || '',
+        aktivitas_real_langsung_sem2:
+          remote.aktivitas_real_langsung_sem2 || local.aktivitas_real_langsung_sem2 || '',
+        aktivitas_real_tidak_langsung_sem2:
+          remote.aktivitas_real_tidak_langsung_sem2 ||
+          local.aktivitas_real_tidak_langsung_sem2 ||
+          '',
+        aktivitas_real_penunjang_sem2:
+          remote.aktivitas_real_penunjang_sem2 || local.aktivitas_real_penunjang_sem2 || '',
+        alokasi_anggaran_perubahan:
+          remote.alokasi_anggaran_perubahan || local.alokasi_anggaran_perubahan || 0,
+        sumber_pembiayaan_perubahan:
+          remote.sumber_pembiayaan_perubahan || local.sumber_pembiayaan_perubahan || '',
+        sifat_bantuan_sem2:
+          remote.sifat_bantuan_sem2 || local.sifat_bantuan_sem2 || '',
+        lokasi_sem2: remote.lokasi_sem2 || local.lokasi_sem2 || '',
+        jumlah_sasaran_sem2:
+          remote.jumlah_sasaran_sem2 || local.jumlah_sasaran_sem2 || 0,
+        satuan_sasaran_sem2:
+          remote.satuan_sasaran_sem2 || local.satuan_sasaran_sem2 || 'KPM',
+        keterangan_sasaran_sem2:
+          remote.keterangan_sasaran_sem2 || local.keterangan_sasaran_sem2 || '',
+        besaran_manfaat_sem2:
+          remote.besaran_manfaat_sem2 || local.besaran_manfaat_sem2 || '',
+        jenis_bantuan_sem2:
+          remote.jenis_bantuan_sem2 || local.jenis_bantuan_sem2 || '',
+        durasi_pemberian_bantuan_sem2:
+          remote.durasi_pemberian_bantuan_sem2 ||
+          local.durasi_pemberian_bantuan_sem2 ||
+          '',
+        keterangan_durasi_bantuan_sem2:
+          remote.keterangan_durasi_bantuan_sem2 ||
+          local.keterangan_durasi_bantuan_sem2 ||
+          '',
+      });
+      return;
+    }
+
+    mergedMap.set(id, remote);
+  });
+
+  // Pastikan baris lokal yang sedang dalam antrean kirim (atau baru dibuat < 30 detik) tidak hilang
+  localItems.forEach((local) => {
+    const id = local.matrix_id;
+    if (!id || pendingDeletedMatrixIds.has(id) || mergedMap.has(id)) return;
+    const recentWriteAt = recentLocalMatrixWriteMs.get(id) || 0;
+    const createdMs = Date.parse(local.created_at || local.updated_at || '') || 0;
+    if (
+      pendingMatrixWrites.has(id) ||
+      nowMs - recentWriteAt < 30000 ||
+      nowMs - createdMs < 30000
+    ) {
+      mergedMap.set(id, local);
+    }
+  });
+
+  return Array.from(mergedMap.values());
+}
+
+function mergeRealisasisWithLocal(remoteItems: RealisasiSemester[]): RealisasiSemester[] {
+  const localItems = loadTable<RealisasiSemester>(STORAGE_KEYS.REALISASI, []);
+  const localMap = new Map<string, RealisasiSemester>();
+  localItems.forEach((r) => {
+    if (r && r.realisasi_id) localMap.set(r.realisasi_id, r);
+  });
+
+  const nowMs = Date.now();
+  const mergedMap = new Map<string, RealisasiSemester>();
+
+  remoteItems.forEach((remote) => {
+    const id = remote.realisasi_id;
+    if (
+      !id ||
+      pendingDeletedRealisasiIds.has(id) ||
+      pendingDeletedMatrixIds.has(remote.matrix_id)
+    ) {
+      return;
+    }
+    knownCloudDocPaths.add(`realisasis/${id}`);
+
+    const pending = pendingRealisasiWrites.get(id);
+    if (pending) {
+      mergedMap.set(id, pending);
+      return;
+    }
+
+    const local = localMap.get(id);
+    if (local) {
+      const recentWriteAt = recentLocalRealisasiWriteMs.get(id) || 0;
+      const localMs = Date.parse(local.updated_at || '') || 0;
+      const remoteMs = Date.parse(remote.updated_at || '') || 0;
+
+      if (nowMs - recentWriteAt < 20000 || localMs > remoteMs + 1000) {
+        mergedMap.set(id, {
+          ...remote,
+          ...local,
+          rincian_realisasi:
+            local.rincian_realisasi || remote.rincian_realisasi || '',
+        });
+        return;
+      }
+
+      mergedMap.set(id, {
+        ...remote,
+        rincian_realisasi:
+          remote.rincian_realisasi || local.rincian_realisasi || '',
+      });
+      return;
+    }
+
+    mergedMap.set(id, remote);
+  });
+
+  localItems.forEach((local) => {
+    const id = local.realisasi_id;
+    if (
+      !id ||
+      pendingDeletedRealisasiIds.has(id) ||
+      pendingDeletedMatrixIds.has(local.matrix_id) ||
+      mergedMap.has(id)
+    ) {
+      return;
+    }
+    const recentWriteAt = recentLocalRealisasiWriteMs.get(id) || 0;
+    const updatedMs = Date.parse(local.updated_at || '') || 0;
+    if (
+      pendingRealisasiWrites.has(id) ||
+      nowMs - recentWriteAt < 30000 ||
+      nowMs - updatedMs < 30000
+    ) {
+      mergedMap.set(id, local);
+    }
+  });
+
+  return Array.from(mergedMap.values());
+}
+
 async function ensureFirebaseAuth(): Promise<User | null> {
-  if (auth.currentUser) return auth.currentUser;
+  if (
+    auth.currentUser &&
+    auth.currentUser.email?.toLowerCase() === 'admin@oppkpke.com'
+  ) {
+    return auth.currentUser;
+  }
   if (pendingAuthPromise) return pendingAuthPromise;
 
   pendingAuthPromise = (async () => {
     try {
-      // Gunakan kredensial sinkronisasi utama agar seluruh dokumen memiliki akses bersama lintas perangkat/Vercel
+      // Gunakan kredensial sinkronisasi utama agar seluruh akun OPD/Admin memiliki akses tulis bersama tanpa konflik ownerId
       const email = 'admin@oppkpke.com';
       const password = 'admin';
       return await syncFirebaseEmailAuth(email, password);
@@ -148,6 +394,54 @@ async function ensureFirebaseAuth(): Promise<User | null> {
   return pendingAuthPromise;
 }
 
+function buildLegacyCompatibleFields(
+  collectionName: string,
+  fields: Record<string, unknown>
+): Record<string, unknown> | null {
+  if (
+    collectionName === 'matrices' &&
+    ('keterangan_durasi_bantuan' in fields ||
+      'alokasi_anggaran_perubahan' in fields ||
+      'sumber_pembiayaan_perubahan' in fields ||
+      'aktivitas_real_langsung_sem2' in fields ||
+      'aktivitas_real_tidak_langsung_sem2' in fields ||
+      'aktivitas_real_penunjang_sem2' in fields ||
+      'sifat_bantuan_sem2' in fields ||
+      'lokasi_sem2' in fields ||
+      'jumlah_sasaran_sem2' in fields ||
+      'satuan_sasaran_sem2' in fields ||
+      'keterangan_sasaran_sem2' in fields ||
+      'besaran_manfaat_sem2' in fields ||
+      'jenis_bantuan_sem2' in fields ||
+      'durasi_pemberian_bantuan_sem2' in fields ||
+      'keterangan_durasi_bantuan_sem2' in fields)
+  ) {
+    const clone = { ...fields };
+    delete clone.keterangan_durasi_bantuan;
+    delete clone.alokasi_anggaran_perubahan;
+    delete clone.sumber_pembiayaan_perubahan;
+    delete clone.aktivitas_real_langsung_sem2;
+    delete clone.aktivitas_real_tidak_langsung_sem2;
+    delete clone.aktivitas_real_penunjang_sem2;
+    delete clone.sifat_bantuan_sem2;
+    delete clone.lokasi_sem2;
+    delete clone.jumlah_sasaran_sem2;
+    delete clone.satuan_sasaran_sem2;
+    delete clone.keterangan_sasaran_sem2;
+    delete clone.besaran_manfaat_sem2;
+    delete clone.jenis_bantuan_sem2;
+    delete clone.durasi_pemberian_bantuan_sem2;
+    delete clone.keterangan_durasi_bantuan_sem2;
+    return clone;
+  }
+  if (collectionName === 'realisasis' && 'rincian_realisasi' in fields) {
+    const clone = { ...fields };
+    delete clone.rincian_realisasi;
+    return clone;
+  }
+  return null;
+}
+
 async function upsertFirestoreDocument(
   collectionName: string,
   docId: string,
@@ -158,11 +452,23 @@ async function upsertFirestoreDocument(
 
   const path = `${collectionName}/${docId}`;
   const docRef = doc(db, collectionName, docId);
-  try {
+
+  const attemptWrite = async (payloadFields: Record<string, unknown>) => {
+    if (knownCloudDocPaths.has(path)) {
+      await setDoc(
+        docRef,
+        {
+          ...payloadFields,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+      return;
+    }
     const existingSnap = await getDoc(docRef);
     if (!existingSnap.exists()) {
       await setDoc(docRef, {
-        ...fields,
+        ...payloadFields,
         ownerId,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -171,13 +477,29 @@ async function upsertFirestoreDocument(
       await setDoc(
         docRef,
         {
-          ...fields,
+          ...payloadFields,
           updatedAt: serverTimestamp(),
         },
         { merge: true }
       );
     }
+    knownCloudDocPaths.add(path);
+  };
+
+  try {
+    await attemptWrite(fields);
   } catch (error) {
+    // Fallback otomatis bila rules pada proyek eksternal belum memuat field opsional baru
+    const legacyFields = buildLegacyCompatibleFields(collectionName, fields);
+    if (legacyFields) {
+      try {
+        await attemptWrite(legacyFields);
+        return;
+      } catch (retryErr) {
+        handleFirestoreError(retryErr, OperationType.WRITE, path);
+        return;
+      }
+    }
     handleFirestoreError(error, OperationType.WRITE, path);
   }
 }
@@ -191,6 +513,7 @@ async function removeFirestoreDocument(
   const path = `${collectionName}/${docId}`;
   try {
     await deleteDoc(doc(db, collectionName, docId));
+    knownCloudDocPaths.delete(path);
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, path);
   }
@@ -271,8 +594,16 @@ function serializeMatrixForFirestore(m: MatrixData): Record<string, unknown> {
     aktivitas_real_langsung: String(m.aktivitas_real_langsung || '').slice(0, 1500),
     aktivitas_real_tidak_langsung: String(m.aktivitas_real_tidak_langsung || '').slice(0, 1500),
     aktivitas_real_penunjang: String(m.aktivitas_real_penunjang || '').slice(0, 1500),
+    aktivitas_real_langsung_sem2: String(m.aktivitas_real_langsung_sem2 || '').slice(0, 1500),
+    aktivitas_real_tidak_langsung_sem2: String(m.aktivitas_real_tidak_langsung_sem2 || '').slice(
+      0,
+      1500
+    ),
+    aktivitas_real_penunjang_sem2: String(m.aktivitas_real_penunjang_sem2 || '').slice(0, 1500),
     alokasi_anggaran: Math.max(0, Number(m.alokasi_anggaran) || 0),
     sumber_pembiayaan: String(m.sumber_pembiayaan || 'APBD Kabupaten').slice(0, 300),
+    alokasi_anggaran_perubahan: Math.max(0, Number(m.alokasi_anggaran_perubahan) || 0),
+    sumber_pembiayaan_perubahan: String(m.sumber_pembiayaan_perubahan || '').slice(0, 300),
     sifat_bantuan: String(m.sifat_bantuan || 'Berkelanjutan').slice(0, 40),
     lokasi: String(m.lokasi || '').slice(0, 300),
     lokasi_kecamatan: String(m.lokasi_kecamatan || '').slice(0, 120),
@@ -285,6 +616,15 @@ function serializeMatrixForFirestore(m: MatrixData): Record<string, unknown> {
     jenis_bantuan: String(m.jenis_bantuan || 'Bantuan sosial').slice(0, 120),
     durasi_pemberian_bantuan: String(m.durasi_pemberian_bantuan || '1 tahun').slice(0, 120),
     keterangan_durasi_bantuan: String(m.keterangan_durasi_bantuan || '').slice(0, 500),
+    sifat_bantuan_sem2: String(m.sifat_bantuan_sem2 || '').slice(0, 40),
+    lokasi_sem2: String(m.lokasi_sem2 || '').slice(0, 300),
+    jumlah_sasaran_sem2: Math.max(0, Number(m.jumlah_sasaran_sem2) || 0),
+    satuan_sasaran_sem2: String(m.satuan_sasaran_sem2 || 'KPM').slice(0, 64),
+    keterangan_sasaran_sem2: String(m.keterangan_sasaran_sem2 || '').slice(0, 500),
+    besaran_manfaat_sem2: String(m.besaran_manfaat_sem2 || '').slice(0, 300),
+    jenis_bantuan_sem2: String(m.jenis_bantuan_sem2 || '').slice(0, 120),
+    durasi_pemberian_bantuan_sem2: String(m.durasi_pemberian_bantuan_sem2 || '').slice(0, 120),
+    keterangan_durasi_bantuan_sem2: String(m.keterangan_durasi_bantuan_sem2 || '').slice(0, 500),
   };
 }
 
@@ -498,9 +838,10 @@ export class DatabaseService {
       }
 
       if (!matricesSnap.empty || !matricesSnap.metadata.fromCache) {
-        const nowIso = new Date().toISOString();
-        const items: MatrixData[] = matricesSnap.docs.map((d) => {
+        const remoteItems: MatrixData[] = matricesSnap.docs.map((d) => {
           const data = d.data();
+          const createdIso = extractFirestoreIso(data.createdAt, data.created_at);
+          const updatedIso = extractFirestoreIso(data.updatedAt, data.updated_at, createdIso);
           return {
             matrix_id: String(data.matrix_id || d.id),
             periode_id: String(data.periode_id || 'per-2026'),
@@ -515,8 +856,15 @@ export class DatabaseService {
               data.aktivitas_real_tidak_langsung || ''
             ),
             aktivitas_real_penunjang: String(data.aktivitas_real_penunjang || ''),
+            aktivitas_real_langsung_sem2: String(data.aktivitas_real_langsung_sem2 || ''),
+            aktivitas_real_tidak_langsung_sem2: String(
+              data.aktivitas_real_tidak_langsung_sem2 || ''
+            ),
+            aktivitas_real_penunjang_sem2: String(data.aktivitas_real_penunjang_sem2 || ''),
             alokasi_anggaran: Number(data.alokasi_anggaran) || 0,
             sumber_pembiayaan: String(data.sumber_pembiayaan || 'APBD Kabupaten'),
+            alokasi_anggaran_perubahan: Number(data.alokasi_anggaran_perubahan) || 0,
+            sumber_pembiayaan_perubahan: String(data.sumber_pembiayaan_perubahan || ''),
             sifat_bantuan:
               data.sifat_bantuan === 'Tidak Berkelanjutan'
                 ? 'Tidak Berkelanjutan'
@@ -536,16 +884,36 @@ export class DatabaseService {
             keterangan_durasi_bantuan: String(
               data.keterangan_durasi_bantuan || ''
             ),
-            created_at: nowIso,
-            updated_at: nowIso,
+            sifat_bantuan_sem2:
+              data.sifat_bantuan_sem2 === 'Tidak Berkelanjutan'
+                ? 'Tidak Berkelanjutan'
+                : data.sifat_bantuan_sem2 === 'Berkelanjutan'
+                ? 'Berkelanjutan'
+                : '',
+            lokasi_sem2: String(data.lokasi_sem2 || ''),
+            jumlah_sasaran_sem2: Number(data.jumlah_sasaran_sem2) || 0,
+            satuan_sasaran_sem2: String(data.satuan_sasaran_sem2 || 'KPM'),
+            keterangan_sasaran_sem2: String(data.keterangan_sasaran_sem2 || ''),
+            besaran_manfaat_sem2: String(data.besaran_manfaat_sem2 || ''),
+            jenis_bantuan_sem2: String(data.jenis_bantuan_sem2 || ''),
+            durasi_pemberian_bantuan_sem2: String(
+              data.durasi_pemberian_bantuan_sem2 || ''
+            ),
+            keterangan_durasi_bantuan_sem2: String(
+              data.keterangan_durasi_bantuan_sem2 || ''
+            ),
+            created_at: createdIso,
+            updated_at: updatedIso,
           };
         });
-        saveTable(STORAGE_KEYS.MATRIX, items, true);
+        const mergedMatrices = mergeMatricesWithLocal(remoteItems);
+        saveTable(STORAGE_KEYS.MATRIX, mergedMatrices, true);
       }
 
       if (!realisasisSnap.empty || !realisasisSnap.metadata.fromCache) {
-        const items: RealisasiSemester[] = realisasisSnap.docs.map((d) => {
+        const remoteItems: RealisasiSemester[] = realisasisSnap.docs.map((d) => {
           const data = d.data();
+          const updatedIso = extractFirestoreIso(data.updatedAt, data.updated_at);
           return {
             realisasi_id: String(data.realisasi_id || d.id),
             matrix_id: String(data.matrix_id || ''),
@@ -558,10 +926,11 @@ export class DatabaseService {
             submitted_at: data.submitted_at ? String(data.submitted_at) : null,
             verified_at: data.verified_at ? String(data.verified_at) : null,
             verified_by: data.verified_by ? String(data.verified_by) : null,
-            updated_at: new Date().toISOString(),
+            updated_at: updatedIso,
           };
         });
-        saveTable(STORAGE_KEYS.REALISASI, items, true);
+        const mergedRealisasis = mergeRealisasisWithLocal(remoteItems);
+        saveTable(STORAGE_KEYS.REALISASI, mergedRealisasis, true);
       }
 
       if (!auditSnap.empty || !auditSnap.metadata.fromCache) {
@@ -621,9 +990,13 @@ export class DatabaseService {
     let isDisposed = false;
     let snapshotsAttached = false;
 
-    // Sinkronisasi instan antar-tab pada browser yang sama
+    // Sinkronisasi instan antar-tab pada browser yang sama (abaikan perubahan SESSION_USER agar multi-akun beda tab tidak saling menimpa)
     const handleStorageEvent = (e: StorageEvent) => {
-      if (e.key && Object.values(STORAGE_KEYS).includes(e.key)) {
+      if (
+        e.key &&
+        e.key !== STORAGE_KEYS.SESSION_USER &&
+        Object.values(STORAGE_KEYS).includes(e.key)
+      ) {
         onDataChanged();
       }
     };
@@ -742,9 +1115,10 @@ export class DatabaseService {
           collection(db, 'matrices'),
           (snap) => {
             if (!snap.empty || !snap.metadata.fromCache) {
-              const items: MatrixData[] = snap.docs.map((d) => {
+              const remoteItems: MatrixData[] = snap.docs.map((d) => {
                 const data = d.data();
-                const nowIso = new Date().toISOString();
+                const createdIso = extractFirestoreIso(data.createdAt, data.created_at);
+                const updatedIso = extractFirestoreIso(data.updatedAt, data.updated_at, createdIso);
                 return {
                   matrix_id: String(data.matrix_id || d.id),
                   periode_id: String(data.periode_id || 'per-2026'),
@@ -759,8 +1133,15 @@ export class DatabaseService {
                     data.aktivitas_real_tidak_langsung || ''
                   ),
                   aktivitas_real_penunjang: String(data.aktivitas_real_penunjang || ''),
+                  aktivitas_real_langsung_sem2: String(data.aktivitas_real_langsung_sem2 || ''),
+                  aktivitas_real_tidak_langsung_sem2: String(
+                    data.aktivitas_real_tidak_langsung_sem2 || ''
+                  ),
+                  aktivitas_real_penunjang_sem2: String(data.aktivitas_real_penunjang_sem2 || ''),
                   alokasi_anggaran: Number(data.alokasi_anggaran) || 0,
                   sumber_pembiayaan: String(data.sumber_pembiayaan || 'APBD Kabupaten'),
+                  alokasi_anggaran_perubahan: Number(data.alokasi_anggaran_perubahan) || 0,
+                  sumber_pembiayaan_perubahan: String(data.sumber_pembiayaan_perubahan || ''),
                   sifat_bantuan:
                     data.sifat_bantuan === 'Tidak Berkelanjutan'
                       ? 'Tidak Berkelanjutan'
@@ -780,11 +1161,30 @@ export class DatabaseService {
                   keterangan_durasi_bantuan: String(
                     data.keterangan_durasi_bantuan || ''
                   ),
-                  created_at: nowIso,
-                  updated_at: nowIso,
+                  sifat_bantuan_sem2:
+                    data.sifat_bantuan_sem2 === 'Tidak Berkelanjutan'
+                      ? 'Tidak Berkelanjutan'
+                      : data.sifat_bantuan_sem2 === 'Berkelanjutan'
+                      ? 'Berkelanjutan'
+                      : '',
+                  lokasi_sem2: String(data.lokasi_sem2 || ''),
+                  jumlah_sasaran_sem2: Number(data.jumlah_sasaran_sem2) || 0,
+                  satuan_sasaran_sem2: String(data.satuan_sasaran_sem2 || 'KPM'),
+                  keterangan_sasaran_sem2: String(data.keterangan_sasaran_sem2 || ''),
+                  besaran_manfaat_sem2: String(data.besaran_manfaat_sem2 || ''),
+                  jenis_bantuan_sem2: String(data.jenis_bantuan_sem2 || ''),
+                  durasi_pemberian_bantuan_sem2: String(
+                    data.durasi_pemberian_bantuan_sem2 || ''
+                  ),
+                  keterangan_durasi_bantuan_sem2: String(
+                    data.keterangan_durasi_bantuan_sem2 || ''
+                  ),
+                  created_at: createdIso,
+                  updated_at: updatedIso,
                 };
               });
-              saveTable(STORAGE_KEYS.MATRIX, items, true);
+              const mergedMatrices = mergeMatricesWithLocal(remoteItems);
+              saveTable(STORAGE_KEYS.MATRIX, mergedMatrices, true);
               onDataChanged();
             }
           },
@@ -799,8 +1199,9 @@ export class DatabaseService {
           collection(db, 'realisasis'),
           (snap) => {
             if (!snap.empty || !snap.metadata.fromCache) {
-              const items: RealisasiSemester[] = snap.docs.map((d) => {
+              const remoteItems: RealisasiSemester[] = snap.docs.map((d) => {
                 const data = d.data();
+                const updatedIso = extractFirestoreIso(data.updatedAt, data.updated_at);
                 return {
                   realisasi_id: String(data.realisasi_id || d.id),
                   matrix_id: String(data.matrix_id || ''),
@@ -813,10 +1214,11 @@ export class DatabaseService {
                   submitted_at: data.submitted_at ? String(data.submitted_at) : null,
                   verified_at: data.verified_at ? String(data.verified_at) : null,
                   verified_by: data.verified_by ? String(data.verified_by) : null,
-                  updated_at: new Date().toISOString(),
+                  updated_at: updatedIso,
                 };
               });
-              saveTable(STORAGE_KEYS.REALISASI, items, true);
+              const mergedRealisasis = mergeRealisasisWithLocal(remoteItems);
+              saveTable(STORAGE_KEYS.REALISASI, mergedRealisasis, true);
               onDataChanged();
             }
           },
@@ -914,7 +1316,12 @@ export class DatabaseService {
 
   static getCurrentSessionUser(): AuthUser | null {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.SESSION_USER);
+      // Utamakan sessionStorage agar setiap tab browser dapat login dengan akun OPD berbeda tanpa saling menimpa
+      const sessionRaw =
+        typeof sessionStorage !== 'undefined'
+          ? sessionStorage.getItem(STORAGE_KEYS.SESSION_USER)
+          : null;
+      const raw = sessionRaw || localStorage.getItem(STORAGE_KEYS.SESSION_USER);
       if (!raw) return null;
       const parsed = JSON.parse(raw) as Partial<AuthUser> | null;
       if (
@@ -923,11 +1330,14 @@ export class DatabaseService {
         typeof parsed.username !== 'string' ||
         !parsed.username.trim()
       ) {
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.removeItem(STORAGE_KEYS.SESSION_USER);
+        }
         localStorage.removeItem(STORAGE_KEYS.SESSION_USER);
         return null;
       }
       const uname = parsed.username.trim();
-      return {
+      const userObj: AuthUser = {
         user_id: String(parsed.user_id || `usr-${uname}`),
         username: uname,
         email: formatOpdEmail(parsed.email || uname),
@@ -940,6 +1350,10 @@ export class DatabaseService {
         instansi_lengkap: String(parsed.instansi_lengkap || parsed.display_name || uname),
         jabatan: String(parsed.jabatan || ''),
       };
+      if (!sessionRaw && typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem(STORAGE_KEYS.SESSION_USER, JSON.stringify(userObj));
+      }
+      return userObj;
     } catch {
       return null;
     }
@@ -948,15 +1362,19 @@ export class DatabaseService {
   static setSessionUser(user: AuthUser | null): void {
     try {
       if (!user) {
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.removeItem(STORAGE_KEYS.SESSION_USER);
+        }
         localStorage.removeItem(STORAGE_KEYS.SESSION_USER);
       } else {
-        localStorage.setItem(
-          STORAGE_KEYS.SESSION_USER,
-          JSON.stringify({
-            ...user,
-            email: formatOpdEmail(user.email || user.username),
-          })
-        );
+        const serialized = JSON.stringify({
+          ...user,
+          email: formatOpdEmail(user.email || user.username),
+        });
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem(STORAGE_KEYS.SESSION_USER, serialized);
+        }
+        localStorage.setItem(STORAGE_KEYS.SESSION_USER, serialized);
       }
     } catch (e) {
       console.error('Gagal menyimpan sesi pengguna:', e);
@@ -1009,12 +1427,9 @@ export class DatabaseService {
 
     this.setSessionUser(enrichedUser);
 
-    // Sinkronkan autentikasi email [namaopd]@oppkpke.com ke Firebase Auth & Firestore di latar belakang
+    // Pastikan koneksi Cloud Firestore tetap menggunakan kredensial sinkronisasi utama tanpa memutus sesi akun lain
     void (async () => {
-      await syncFirebaseEmailAuth(
-        enrichedUser.email || formatOpdEmail(enrichedUser.username),
-        cleanPass
-      );
+      await ensureFirebaseAuth();
       await upsertFirestoreDocument(
         'user_accounts',
         enrichedUser.user_id,
@@ -1520,11 +1935,14 @@ export class DatabaseService {
 
       const total_realisasi_tahunan = (Number(sem1.realisasi) || 0) + (Number(sem2.realisasi) || 0);
       const alokasi = Number(m.alokasi_anggaran) || 0;
+      const alokasiPerubahan = Number(m.alokasi_anggaran_perubahan) || 0;
+      const effectiveAlokasiSem2 = alokasiPerubahan > 0 ? alokasiPerubahan : alokasi;
 
       const persentase_realisasi_sem1 = alokasi > 0 ? (sem1.realisasi / alokasi) * 100 : 0;
-      const persentase_realisasi_sem2 = alokasi > 0 ? (sem2.realisasi / alokasi) * 100 : 0;
+      const persentase_realisasi_sem2 =
+        effectiveAlokasiSem2 > 0 ? (sem2.realisasi / effectiveAlokasiSem2) * 100 : 0;
       const persentase_realisasi_tahunan =
-        alokasi > 0 ? (total_realisasi_tahunan / alokasi) * 100 : 0;
+        effectiveAlokasiSem2 > 0 ? (total_realisasi_tahunan / effectiveAlokasiSem2) * 100 : 0;
 
       const hasAktivitas = Boolean(
         m.aktivitas_real_langsung.trim() ||
@@ -1609,8 +2027,13 @@ export class DatabaseService {
         | 'aktivitas_real_langsung'
         | 'aktivitas_real_tidak_langsung'
         | 'aktivitas_real_penunjang'
+        | 'aktivitas_real_langsung_sem2'
+        | 'aktivitas_real_tidak_langsung_sem2'
+        | 'aktivitas_real_penunjang_sem2'
         | 'alokasi_anggaran'
         | 'sumber_pembiayaan'
+        | 'alokasi_anggaran_perubahan'
+        | 'sumber_pembiayaan_perubahan'
         | 'sifat_bantuan'
         | 'lokasi'
         | 'lokasi_kecamatan'
@@ -1623,6 +2046,15 @@ export class DatabaseService {
         | 'jenis_bantuan'
         | 'durasi_pemberian_bantuan'
         | 'keterangan_durasi_bantuan'
+        | 'sifat_bantuan_sem2'
+        | 'lokasi_sem2'
+        | 'jumlah_sasaran_sem2'
+        | 'satuan_sasaran_sem2'
+        | 'keterangan_sasaran_sem2'
+        | 'besaran_manfaat_sem2'
+        | 'jenis_bantuan_sem2'
+        | 'durasi_pemberian_bantuan_sem2'
+        | 'keterangan_durasi_bantuan_sem2'
       >
     >;
     sem1Input?: {
@@ -1702,8 +2134,17 @@ export class DatabaseService {
         aktivitas_real_tidak_langsung:
           params.opdUpdates.aktivitas_real_tidak_langsung || '',
         aktivitas_real_penunjang: params.opdUpdates.aktivitas_real_penunjang || '',
+        aktivitas_real_langsung_sem2: params.opdUpdates.aktivitas_real_langsung_sem2 || '',
+        aktivitas_real_tidak_langsung_sem2:
+          params.opdUpdates.aktivitas_real_tidak_langsung_sem2 || '',
+        aktivitas_real_penunjang_sem2: params.opdUpdates.aktivitas_real_penunjang_sem2 || '',
         alokasi_anggaran: Math.max(0, Number(params.opdUpdates.alokasi_anggaran) || 0),
         sumber_pembiayaan: params.opdUpdates.sumber_pembiayaan || 'APBD Kabupaten',
+        alokasi_anggaran_perubahan: Math.max(
+          0,
+          Number(params.opdUpdates.alokasi_anggaran_perubahan) || 0
+        ),
+        sumber_pembiayaan_perubahan: params.opdUpdates.sumber_pembiayaan_perubahan || '',
         sifat_bantuan: params.opdUpdates.sifat_bantuan || 'Berkelanjutan',
         lokasi: params.opdUpdates.lokasi || 'Kabupaten Blora',
         lokasi_kecamatan: params.opdUpdates.lokasi_kecamatan || 'Kabupaten Blora',
@@ -1718,6 +2159,17 @@ export class DatabaseService {
           params.opdUpdates.durasi_pemberian_bantuan || '1 tahun',
         keterangan_durasi_bantuan:
           params.opdUpdates.keterangan_durasi_bantuan || '',
+        sifat_bantuan_sem2: params.opdUpdates.sifat_bantuan_sem2 || '',
+        lokasi_sem2: params.opdUpdates.lokasi_sem2 || '',
+        jumlah_sasaran_sem2: Math.max(0, Number(params.opdUpdates.jumlah_sasaran_sem2) || 0),
+        satuan_sasaran_sem2: params.opdUpdates.satuan_sasaran_sem2 || 'KPM',
+        keterangan_sasaran_sem2: params.opdUpdates.keterangan_sasaran_sem2 || '',
+        besaran_manfaat_sem2: params.opdUpdates.besaran_manfaat_sem2 || '',
+        jenis_bantuan_sem2: params.opdUpdates.jenis_bantuan_sem2 || '',
+        durasi_pemberian_bantuan_sem2:
+          params.opdUpdates.durasi_pemberian_bantuan_sem2 || '',
+        keterangan_durasi_bantuan_sem2:
+          params.opdUpdates.keterangan_durasi_bantuan_sem2 || '',
         created_at: now,
         updated_at: now,
       };
@@ -1726,10 +2178,27 @@ export class DatabaseService {
       realisasis.push(this.createDefaultRealisasi(targetMatrixId, 2));
     } else {
       const existingMatrix = matrices[matrixIdx];
+      const existingS1 = realisasis.find(
+        (r) => r.matrix_id === existingMatrix.matrix_id && r.semester === 1
+      );
+      const isSem1Verified = existingS1?.status_verifikasi === 'Terverifikasi';
+
       targetMatrix = {
         ...existingMatrix,
         ...params.opdUpdates,
         opd_id: params.opd_id || existingMatrix.opd_id,
+        aktivitas_real_langsung_sem2:
+          params.opdUpdates.aktivitas_real_langsung_sem2 ??
+          existingMatrix.aktivitas_real_langsung_sem2 ??
+          '',
+        aktivitas_real_tidak_langsung_sem2:
+          params.opdUpdates.aktivitas_real_tidak_langsung_sem2 ??
+          existingMatrix.aktivitas_real_tidak_langsung_sem2 ??
+          '',
+        aktivitas_real_penunjang_sem2:
+          params.opdUpdates.aktivitas_real_penunjang_sem2 ??
+          existingMatrix.aktivitas_real_penunjang_sem2 ??
+          '',
         jumlah_sasaran: Math.max(
           0,
           Number(params.opdUpdates.jumlah_sasaran ?? existingMatrix.jumlah_sasaran) || 0
@@ -1742,10 +2211,63 @@ export class DatabaseService {
           params.opdUpdates.keterangan_durasi_bantuan ??
           existingMatrix.keterangan_durasi_bantuan ??
           '',
-        alokasi_anggaran: Math.max(
+        sifat_bantuan_sem2:
+          params.opdUpdates.sifat_bantuan_sem2 ??
+          existingMatrix.sifat_bantuan_sem2 ??
+          '',
+        lokasi_sem2:
+          params.opdUpdates.lokasi_sem2 ?? existingMatrix.lokasi_sem2 ?? '',
+        jumlah_sasaran_sem2: Math.max(
           0,
-          Number(params.opdUpdates.alokasi_anggaran ?? existingMatrix.alokasi_anggaran) || 0
+          Number(
+            params.opdUpdates.jumlah_sasaran_sem2 ??
+              existingMatrix.jumlah_sasaran_sem2
+          ) || 0
         ),
+        satuan_sasaran_sem2:
+          params.opdUpdates.satuan_sasaran_sem2 ??
+          existingMatrix.satuan_sasaran_sem2 ??
+          'KPM',
+        keterangan_sasaran_sem2:
+          params.opdUpdates.keterangan_sasaran_sem2 ??
+          existingMatrix.keterangan_sasaran_sem2 ??
+          '',
+        besaran_manfaat_sem2:
+          params.opdUpdates.besaran_manfaat_sem2 ??
+          existingMatrix.besaran_manfaat_sem2 ??
+          '',
+        jenis_bantuan_sem2:
+          params.opdUpdates.jenis_bantuan_sem2 ??
+          existingMatrix.jenis_bantuan_sem2 ??
+          '',
+        durasi_pemberian_bantuan_sem2:
+          params.opdUpdates.durasi_pemberian_bantuan_sem2 ??
+          existingMatrix.durasi_pemberian_bantuan_sem2 ??
+          '',
+        keterangan_durasi_bantuan_sem2:
+          params.opdUpdates.keterangan_durasi_bantuan_sem2 ??
+          existingMatrix.keterangan_durasi_bantuan_sem2 ??
+          '',
+        alokasi_anggaran: isSem1Verified
+          ? existingMatrix.alokasi_anggaran
+          : Math.max(
+              0,
+              Number(params.opdUpdates.alokasi_anggaran ?? existingMatrix.alokasi_anggaran) || 0
+            ),
+        sumber_pembiayaan: isSem1Verified
+          ? existingMatrix.sumber_pembiayaan
+          : params.opdUpdates.sumber_pembiayaan ?? existingMatrix.sumber_pembiayaan,
+        alokasi_anggaran_perubahan: Math.max(
+          0,
+          Number(
+            params.opdUpdates.alokasi_anggaran_perubahan ??
+              existingMatrix.alokasi_anggaran_perubahan
+          ) || 0
+        ),
+        sumber_pembiayaan_perubahan:
+          params.opdUpdates.sumber_pembiayaan_perubahan ??
+          existingMatrix.sumber_pembiayaan_perubahan ??
+          '',
         updated_at: now,
       };
       matrices[matrixIdx] = targetMatrix;
@@ -1919,40 +2441,71 @@ export class DatabaseService {
     const targetS2 = realisasis.find(
       (r) => r.matrix_id === targetMatrix.matrix_id && r.semester === 2
     );
+
+    const writeTimestampMs = Date.now();
+    pendingMatrixWrites.set(targetMatrix.matrix_id, targetMatrix);
+    recentLocalMatrixWriteMs.set(targetMatrix.matrix_id, writeTimestampMs);
+
+    if (targetS1) {
+      pendingRealisasiWrites.set(targetS1.realisasi_id, targetS1);
+      recentLocalRealisasiWriteMs.set(targetS1.realisasi_id, writeTimestampMs);
+    }
+    if (targetS2) {
+      pendingRealisasiWrites.set(targetS2.realisasi_id, targetS2);
+      recentLocalRealisasiWriteMs.set(targetS2.realisasi_id, writeTimestampMs);
+    }
+
     void (async () => {
-      if (periode) {
+      try {
+        // Pastikan dokumen referensi periode & OPD tersedia jika belum pernah diunggah ke cloud
+        if (periode && !knownCloudDocPaths.has(`periodes/${periode.periode_id}`)) {
+          await upsertFirestoreDocument(
+            'periodes',
+            periode.periode_id,
+            serializePeriodeForFirestore(periode)
+          );
+        }
+        const opdObj = this.getOpdList().find((o) => o.opd_id === targetMatrix.opd_id);
+        if (opdObj && !knownCloudDocPaths.has(`opds/${opdObj.opd_id}`)) {
+          await upsertFirestoreDocument(
+            'opds',
+            opdObj.opd_id,
+            serializeOpdForFirestore(opdObj)
+          );
+        }
+
+        // Simpan matriks terlebih dahulu, lalu simpan realisasi S1 & S2 secara paralel
         await upsertFirestoreDocument(
-          'periodes',
-          periode.periode_id,
-          serializePeriodeForFirestore(periode)
+          'matrices',
+          targetMatrix.matrix_id,
+          serializeMatrixForFirestore(targetMatrix)
         );
-      }
-      const opdObj = this.getOpdList().find((o) => o.opd_id === targetMatrix.opd_id);
-      if (opdObj) {
-        await upsertFirestoreDocument(
-          'opds',
-          opdObj.opd_id,
-          serializeOpdForFirestore(opdObj)
-        );
-      }
-      await upsertFirestoreDocument(
-        'matrices',
-        targetMatrix.matrix_id,
-        serializeMatrixForFirestore(targetMatrix)
-      );
-      if (targetS1) {
-        await upsertFirestoreDocument(
-          'realisasis',
-          targetS1.realisasi_id,
-          serializeRealisasiForFirestore(targetS1)
-        );
-      }
-      if (targetS2) {
-        await upsertFirestoreDocument(
-          'realisasis',
-          targetS2.realisasi_id,
-          serializeRealisasiForFirestore(targetS2)
-        );
+        pendingMatrixWrites.delete(targetMatrix.matrix_id);
+
+        await Promise.all([
+          targetS1
+            ? upsertFirestoreDocument(
+                'realisasis',
+                targetS1.realisasi_id,
+                serializeRealisasiForFirestore(targetS1)
+              ).finally(() => {
+                pendingRealisasiWrites.delete(targetS1.realisasi_id);
+              })
+            : Promise.resolve(),
+          targetS2
+            ? upsertFirestoreDocument(
+                'realisasis',
+                targetS2.realisasi_id,
+                serializeRealisasiForFirestore(targetS2)
+              ).finally(() => {
+                pendingRealisasiWrites.delete(targetS2.realisasi_id);
+              })
+            : Promise.resolve(),
+        ]);
+      } finally {
+        pendingMatrixWrites.delete(targetMatrix.matrix_id);
+        if (targetS1) pendingRealisasiWrites.delete(targetS1.realisasi_id);
+        if (targetS2) pendingRealisasiWrites.delete(targetS2.realisasi_id);
       }
     })();
 
@@ -1998,13 +2551,33 @@ export class DatabaseService {
     const updatedMatrices = matrices.filter((m) => m.matrix_id !== params.matrix_id);
     const realisasis = allRealisasis.filter((r) => r.matrix_id !== params.matrix_id);
 
+    pendingDeletedMatrixIds.add(params.matrix_id);
+    pendingMatrixWrites.delete(params.matrix_id);
+    removedRealisasis.forEach((r) => {
+      pendingDeletedRealisasiIds.add(r.realisasi_id);
+      pendingRealisasiWrites.delete(r.realisasi_id);
+    });
+
     saveTable(STORAGE_KEYS.MATRIX, updatedMatrices);
     saveTable(STORAGE_KEYS.REALISASI, realisasis);
 
-    removedRealisasis.forEach((r) => {
-      void removeFirestoreDocument('realisasis', r.realisasi_id);
-    });
-    void removeFirestoreDocument('matrices', params.matrix_id);
+    void (async () => {
+      try {
+        await Promise.all([
+          ...removedRealisasis.map((r) =>
+            removeFirestoreDocument('realisasis', r.realisasi_id)
+          ),
+          removeFirestoreDocument('matrices', params.matrix_id),
+        ]);
+      } finally {
+        setTimeout(() => {
+          pendingDeletedMatrixIds.delete(params.matrix_id);
+          removedRealisasis.forEach((r) => {
+            pendingDeletedRealisasiIds.delete(r.realisasi_id);
+          });
+        }, 10000);
+      }
+    })();
 
     this.addAuditLog({
       matrix_id: target.matrix_id,
@@ -2064,17 +2637,25 @@ export class DatabaseService {
 
     saveTable(STORAGE_KEYS.REALISASI, realisasis);
 
+    const writeMs = Date.now();
+    pendingRealisasiWrites.set(updated.realisasi_id, updated);
+    recentLocalRealisasiWriteMs.set(updated.realisasi_id, writeMs);
+
     void (async () => {
-      await upsertFirestoreDocument(
-        'matrices',
-        matrix.matrix_id,
-        serializeMatrixForFirestore(matrix)
-      );
-      await upsertFirestoreDocument(
-        'realisasis',
-        updated.realisasi_id,
-        serializeRealisasiForFirestore(updated)
-      );
+      try {
+        await upsertFirestoreDocument(
+          'matrices',
+          matrix.matrix_id,
+          serializeMatrixForFirestore(matrix)
+        );
+        await upsertFirestoreDocument(
+          'realisasis',
+          updated.realisasi_id,
+          serializeRealisasiForFirestore(updated)
+        );
+      } finally {
+        pendingRealisasiWrites.delete(updated.realisasi_id);
+      }
     })();
 
     this.addAuditLog({
@@ -2260,6 +2841,10 @@ export class DatabaseService {
 
     let importedCount = 0;
 
+    const importedMatrices: MatrixData[] = [];
+    const importedRealisasis: RealisasiSemester[] = [];
+    const writeMs = Date.now();
+
     rows.forEach((row, index) => {
       const matchedOpd = forcedOpdId
         ? opds.find((o) => o.opd_id === forcedOpdId) || opds[0]
@@ -2300,16 +2885,57 @@ export class DatabaseService {
         updated_at: now,
       };
 
+      const s1 = this.createDefaultRealisasi(newMatrixId, 1);
+      const s2 = this.createDefaultRealisasi(newMatrixId, 2);
+
       matrices.unshift(newMatrix);
-      realisasis.push(this.createDefaultRealisasi(newMatrixId, 1));
-      realisasis.push(this.createDefaultRealisasi(newMatrixId, 2));
+      realisasis.push(s1, s2);
+
+      importedMatrices.push(newMatrix);
+      importedRealisasis.push(s1, s2);
+
+      pendingMatrixWrites.set(newMatrix.matrix_id, newMatrix);
+      recentLocalMatrixWriteMs.set(newMatrix.matrix_id, writeMs);
+      pendingRealisasiWrites.set(s1.realisasi_id, s1);
+      recentLocalRealisasiWriteMs.set(s1.realisasi_id, writeMs);
+      pendingRealisasiWrites.set(s2.realisasi_id, s2);
+      recentLocalRealisasiWriteMs.set(s2.realisasi_id, writeMs);
+
       importedCount++;
     });
 
     saveTable(STORAGE_KEYS.MATRIX, matrices);
     saveTable(STORAGE_KEYS.REALISASI, realisasis);
 
-    void this.syncAllLocalToFirestore();
+    void (async () => {
+      try {
+        await Promise.all(
+          importedMatrices.map((m) =>
+            upsertFirestoreDocument(
+              'matrices',
+              m.matrix_id,
+              serializeMatrixForFirestore(m)
+            ).finally(() => {
+              pendingMatrixWrites.delete(m.matrix_id);
+            })
+          )
+        );
+        await Promise.all(
+          importedRealisasis.map((r) =>
+            upsertFirestoreDocument(
+              'realisasis',
+              r.realisasi_id,
+              serializeRealisasiForFirestore(r)
+            ).finally(() => {
+              pendingRealisasiWrites.delete(r.realisasi_id);
+            })
+          )
+        );
+      } finally {
+        importedMatrices.forEach((m) => pendingMatrixWrites.delete(m.matrix_id));
+        importedRealisasis.forEach((r) => pendingRealisasiWrites.delete(r.realisasi_id));
+      }
+    })();
 
     this.addAuditLog({
       matrix_id: 'EXCEL-IMPORT',

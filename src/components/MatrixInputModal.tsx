@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   X,
@@ -20,6 +20,7 @@ import {
   Search,
   ChevronDown,
   Building2,
+  Sparkles,
 } from 'lucide-react';
 import {
   AuditLog,
@@ -57,6 +58,7 @@ interface MatrixInputModalProps {
   activePeriode: PeriodePelaporan;
   selectedSemester?: 1 | 2;
   userRole: UserRole;
+  existingRows?: EnrichedMatrixRow[];
   auditLogs: AuditLog[];
   onClose: () => void;
   onSave: (params: {
@@ -72,8 +74,13 @@ interface MatrixInputModalProps {
       aktivitas_real_langsung: string;
       aktivitas_real_tidak_langsung: string;
       aktivitas_real_penunjang: string;
+      aktivitas_real_langsung_sem2?: string;
+      aktivitas_real_tidak_langsung_sem2?: string;
+      aktivitas_real_penunjang_sem2?: string;
       alokasi_anggaran: number;
       sumber_pembiayaan: string;
+      alokasi_anggaran_perubahan?: number;
+      sumber_pembiayaan_perubahan?: string;
       sifat_bantuan: SifatBantuan;
       lokasi: string;
       lokasi_kecamatan: string;
@@ -86,6 +93,15 @@ interface MatrixInputModalProps {
       jenis_bantuan: string;
       durasi_pemberian_bantuan: string;
       keterangan_durasi_bantuan?: string;
+      sifat_bantuan_sem2?: SifatBantuan;
+      lokasi_sem2?: string;
+      jumlah_sasaran_sem2?: number;
+      satuan_sasaran_sem2?: string;
+      keterangan_sasaran_sem2?: string;
+      besaran_manfaat_sem2?: string;
+      jenis_bantuan_sem2?: string;
+      durasi_pemberian_bantuan_sem2?: string;
+      keterangan_durasi_bantuan_sem2?: string;
     };
     sem1Input?: {
       realisasi: number;
@@ -156,11 +172,14 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
   activePeriode,
   selectedSemester = 1,
   userRole,
+  existingRows = [],
   auditLogs,
   onClose,
   onSave,
 }) => {
-  const isEditMode = Boolean(initialRow);
+  const [matchedSem1Row, setMatchedSem1Row] = useState<EnrichedMatrixRow | null>(null);
+  const effectiveRow = initialRow || matchedSem1Row;
+  const isEditMode = Boolean(effectiveRow);
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
 
   // Langkah 1: Identitas & Rekening Program (Terisolasi ketat per Instansi berdasarkan Master Kode SIPD)
@@ -186,11 +205,22 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
   const [aktivitasLangsung, setAktivitasLangsung] = useState<string>('');
   const [aktivitasTidakLangsung, setAktivitasTidakLangsung] = useState<string>('');
   const [aktivitasPenunjang, setAktivitasPenunjang] = useState<string>('');
+  const [aktivitasLangsungSem2, setAktivitasLangsungSem2] = useState<string>('');
+  const [aktivitasTidakLangsungSem2, setAktivitasTidakLangsungSem2] = useState<string>('');
+  const [aktivitasPenunjangSem2, setAktivitasPenunjangSem2] = useState<string>('');
   const [alokasiAnggaran, setAlokasiAnggaran] = useState<number>(0);
   const [selectedSumberList, setSelectedSumberList] = useState<string[]>(['APBD Kabupaten']);
   const [customSumberInput, setCustomSumberInput] = useState<string>('');
 
-  // Langkah 3: Karakteristik, Lokasi Kegiatan & Sasaran Bantuan
+  // State Alokasi Anggaran Perubahan & Sumber Pendanaan Perubahan (Semester 2)
+  const [showAnggaranPerubahan, setShowAnggaranPerubahan] = useState<boolean>(false);
+  const [alokasiAnggaranPerubahan, setAlokasiAnggaranPerubahan] = useState<number>(0);
+  const [selectedSumberPerubahanList, setSelectedSumberPerubahanList] = useState<string[]>([
+    'APBDP Kabupaten',
+  ]);
+  const [customSumberPerubahanInput, setCustomSumberPerubahanInput] = useState<string>('');
+
+  // Langkah 3: Karakteristik, Lokasi Kegiatan & Sasaran Bantuan (Semester 1)
   const [sifatBantuan, setSifatBantuan] = useState<SifatBantuan>('Berkelanjutan');
   const [lokasiKegiatan, setLokasiKegiatan] = useState<string>('Kabupaten Blora');
   const [deskripsiSasaran, setDeskripsiSasaran] = useState<string>('');
@@ -203,114 +233,299 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
 
   const durasiBantuan = `${Math.max(1, durasiAngka || 1)} ${durasiSatuan}`;
 
+  // Langkah 3 (Khusus Semester 2): Isian Karakteristik, Lokasi Kegiatan & Sasaran Bantuan Semester 2
+  const [sifatBantuanSem2, setSifatBantuanSem2] = useState<SifatBantuan>('Berkelanjutan');
+  const [lokasiKegiatanSem2, setLokasiKegiatanSem2] = useState<string>('');
+  const [deskripsiSasaranSem2, setDeskripsiSasaranSem2] = useState<string>('');
+  const [besaranManfaatSem2, setBesaranManfaatSem2] = useState<string>('');
+  const [jenisBantuanSem2, setJenisBantuanSem2] = useState<string>('Bantuan sosial');
+  const [customJenisBantuanSem2, setCustomJenisBantuanSem2] = useState<string>('');
+  const [durasiAngkaSem2, setDurasiAngkaSem2] = useState<number>(1);
+  const [durasiSatuanSem2, setDurasiSatuanSem2] = useState<string>('tahun');
+  const [keteranganDurasiBantuanSem2, setKeteranganDurasiBantuanSem2] = useState<string>('');
+
+  const durasiBantuanSem2 = `${Math.max(1, durasiAngkaSem2 || 1)} ${durasiSatuanSem2}`;
+
   // Langkah 4: Realisasi & Rincian Realisasi Semester 1 & Semester 2
   const [realisasiSem1, setRealisasiSem1] = useState<number>(0);
   const [rincianRealisasiSem1, setRincianRealisasiSem1] = useState<string>('');
   const [realisasiSem2, setRealisasiSem2] = useState<number>(0);
   const [rincianRealisasiSem2, setRincianRealisasiSem2] = useState<string>('');
 
-  // Sinkronisasi data saat modal dibuka
-  useEffect(() => {
-    if (!isOpen) return;
-    setCurrentStep(1);
+  // Kunci sesi form aktif agar refresh real-time dari akun lain TIDAK me-reset step atau input yang sedang diketik
+  const initializedSessionKeyRef = useRef<string | null>(null);
 
+  const activeModalSessionKey = useMemo(() => {
+    if (!isOpen) return null;
     if (initialRow) {
-      setSelectedOpdId(initialRow.opd_id);
-      setStrategi(initialRow.strategi || STRATEGI_OPPKPKE_LIST[0]);
-      setKodeRekening(initialRow.kode || '');
-      setKodeProgram('');
-      setProgram(initialRow.program || '');
-      setKodeKegiatan('');
-      setKegiatan(initialRow.kegiatan || '');
-      setSubKegiatan(initialRow.sub_kegiatan || '');
+      return `edit:${activePeriode.periode_id}:${initialRow.matrix_id}`;
+    }
+    if (initialSipdItem) {
+      return `sipd:${activePeriode.periode_id}:${activeOpd.opd_id}:${initialSipdItem.sipd_id || initialSipdItem.kode_sub_kegiatan}`;
+    }
+    return `new:${activePeriode.periode_id}:${activeOpd.opd_id}`;
+  }, [isOpen, initialRow?.matrix_id, initialSipdItem, activePeriode.periode_id, activeOpd.opd_id]);
 
-      setAktivitasLangsung(initialRow.aktivitas_real_langsung || '');
-      setAktivitasTidakLangsung(initialRow.aktivitas_real_tidak_langsung || '');
-      setAktivitasPenunjang(initialRow.aktivitas_real_penunjang || '');
-      setAlokasiAnggaran(initialRow.alokasi_anggaran || 0);
+  const draftStorageKey = useMemo(() => {
+    if (!activeModalSessionKey) return null;
+    return `optimis_matrix_form_draft_v2_${activeModalSessionKey}`;
+  }, [activeModalSessionKey]);
 
-      const rawSumber = initialRow.sumber_pembiayaan || 'APBD Kabupaten';
-      const parsedSumber = rawSumber
-        .split(/[,+]/)
-        .map((s) => s.trim())
-        .filter(Boolean);
-      setSelectedSumberList(parsedSumber.length > 0 ? parsedSumber : ['APBD Kabupaten']);
-      setCustomSumberInput('');
+  const clearModalDraft = useCallback(() => {
+    if (!draftStorageKey) return;
+    try {
+      sessionStorage.removeItem(draftStorageKey);
+    } catch {
+      // ignore storage errors
+    }
+  }, [draftStorageKey]);
 
-      setSifatBantuan(initialRow.sifat_bantuan || 'Berkelanjutan');
-      setLokasiKegiatan(
-        initialRow.lokasi ||
-          [initialRow.lokasi_kecamatan, initialRow.lokasi_desa, initialRow.lokasi_spesifik]
-            .filter(Boolean)
-            .join(' · ') ||
-          'Kabupaten Blora'
-      );
+  // Sinkronisasi data HANYA sekali saat modal pertama kali dibuka untuk baris terkait
+  useEffect(() => {
+    if (!isOpen || !activeModalSessionKey) {
+      initializedSessionKeyRef.current = null;
+      return;
+    }
 
-      const initialDeskripsiSasaran =
-        initialRow.keterangan_sasaran?.trim() ||
-        (initialRow.jumlah_sasaran > 0
-          ? `${formatNumber(initialRow.jumlah_sasaran)} ${initialRow.satuan_sasaran || 'KPM'}`
-          : '');
-      setDeskripsiSasaran(initialDeskripsiSasaran);
-      setBesaranManfaat(initialRow.besaran_manfaat || '');
+    // Jika modal sudah diinisialisasi untuk sesi baris ini, JANGAN reset form ketika ada snapshot/login akun lain
+    if (initializedSessionKeyRef.current === activeModalSessionKey) {
+      return;
+    }
+    initializedSessionKeyRef.current = activeModalSessionKey;
 
-      if (
-        JENIS_BANTUAN_OPTIONS.includes(initialRow.jenis_bantuan) ||
-        !initialRow.jenis_bantuan
-      ) {
-        setJenisBantuan(initialRow.jenis_bantuan || 'Bantuan sosial');
-        setCustomJenisBantuan('');
-      } else {
-        setJenisBantuan('Bantuan lainnya');
-        setCustomJenisBantuan(initialRow.jenis_bantuan);
+    // Cek apakah ada draft pengisian yang belum disimpan pada sesi tab ini
+    let restoredFromDraft = false;
+    if (draftStorageKey) {
+      try {
+        const rawDraft = sessionStorage.getItem(draftStorageKey);
+        if (rawDraft) {
+          const parsed = JSON.parse(rawDraft);
+          const expectedBaseUpdated = initialRow?.updated_at || null;
+          if (parsed && typeof parsed === 'object' && parsed.baseUpdatedAt === expectedBaseUpdated) {
+            setCurrentStep((parsed.currentStep as 1 | 2 | 3 | 4) || 1);
+            setSelectedOpdId(parsed.selectedOpdId || initialRow?.opd_id || activeOpd.opd_id);
+            setStrategi(parsed.strategi || STRATEGI_OPPKPKE_LIST[0]);
+            setKodeProgram(parsed.kodeProgram || '');
+            setProgram(parsed.program || '');
+            setKodeKegiatan(parsed.kodeKegiatan || '');
+            setKegiatan(parsed.kegiatan || '');
+            setSubKegiatan(parsed.subKegiatan || '');
+            setKodeRekening(parsed.kodeRekening || '');
+            setAktivitasLangsung(parsed.aktivitasLangsung || '');
+            setAktivitasTidakLangsung(parsed.aktivitasTidakLangsung || '');
+            setAktivitasPenunjang(parsed.aktivitasPenunjang || '');
+            setAktivitasLangsungSem2(parsed.aktivitasLangsungSem2 || '');
+            setAktivitasTidakLangsungSem2(parsed.aktivitasTidakLangsungSem2 || '');
+            setAktivitasPenunjangSem2(parsed.aktivitasPenunjangSem2 || '');
+            setAlokasiAnggaran(Number(parsed.alokasiAnggaran) || 0);
+            setSelectedSumberList(
+              Array.isArray(parsed.selectedSumberList) && parsed.selectedSumberList.length > 0
+                ? parsed.selectedSumberList
+                : ['APBD Kabupaten']
+            );
+            setCustomSumberInput(parsed.customSumberInput || '');
+            setShowAnggaranPerubahan(Boolean(parsed.showAnggaranPerubahan));
+            setAlokasiAnggaranPerubahan(Number(parsed.alokasiAnggaranPerubahan) || 0);
+            setSelectedSumberPerubahanList(
+              Array.isArray(parsed.selectedSumberPerubahanList) &&
+                parsed.selectedSumberPerubahanList.length > 0
+                ? parsed.selectedSumberPerubahanList
+                : ['APBDP Kabupaten']
+            );
+            setCustomSumberPerubahanInput(parsed.customSumberPerubahanInput || '');
+            setSifatBantuan(parsed.sifatBantuan || 'Berkelanjutan');
+            setLokasiKegiatan(parsed.lokasiKegiatan || 'Kabupaten Blora');
+            setDeskripsiSasaran(parsed.deskripsiSasaran || '');
+            setBesaranManfaat(parsed.besaranManfaat || '');
+            setJenisBantuan(parsed.jenisBantuan || 'Bantuan sosial');
+            setCustomJenisBantuan(parsed.customJenisBantuan || '');
+            setDurasiAngka(Number(parsed.durasiAngka) || 1);
+            setDurasiSatuan(parsed.durasiSatuan || 'tahun');
+            setKeteranganDurasiBantuan(parsed.keteranganDurasiBantuan || '');
+            setSifatBantuanSem2(parsed.sifatBantuanSem2 || 'Berkelanjutan');
+            setLokasiKegiatanSem2(parsed.lokasiKegiatanSem2 || '');
+            setDeskripsiSasaranSem2(parsed.deskripsiSasaranSem2 || '');
+            setBesaranManfaatSem2(parsed.besaranManfaatSem2 || '');
+            setJenisBantuanSem2(parsed.jenisBantuanSem2 || 'Bantuan sosial');
+            setCustomJenisBantuanSem2(parsed.customJenisBantuanSem2 || '');
+            setDurasiAngkaSem2(Number(parsed.durasiAngkaSem2) || 1);
+            setDurasiSatuanSem2(parsed.durasiSatuanSem2 || 'tahun');
+            setKeteranganDurasiBantuanSem2(parsed.keteranganDurasiBantuanSem2 || '');
+            setRealisasiSem1(Number(parsed.realisasiSem1) || 0);
+            setRincianRealisasiSem1(parsed.rincianRealisasiSem1 || '');
+            setRealisasiSem2(Number(parsed.realisasiSem2) || 0);
+            setRincianRealisasiSem2(parsed.rincianRealisasiSem2 || '');
+            restoredFromDraft = true;
+          }
+        }
+      } catch {
+        // ignore parse errors
       }
+    }
 
-      const parsedDurasi = parseDurasiString(initialRow.durasi_pemberian_bantuan);
-      setDurasiAngka(parsedDurasi.angka);
-      setDurasiSatuan(parsedDurasi.satuan);
-      setKeteranganDurasiBantuan(initialRow.keterangan_durasi_bantuan || '');
+    if (!restoredFromDraft) {
+      setCurrentStep(1);
+      setMatchedSem1Row(null);
 
-      setRealisasiSem1(initialRow.sem1.realisasi || 0);
-      setRincianRealisasiSem1(initialRow.sem1.rincian_realisasi || '');
-      setRealisasiSem2(initialRow.sem2.realisasi || 0);
-      setRincianRealisasiSem2(initialRow.sem2.rincian_realisasi || '');
-    } else {
-      // Default untuk Tambah Baris Baru oleh Instansi (OPD) atau Admin
-      const matchedOpdId =
-        userRole === 'ADMIN' && initialSipdItem
-          ? SipdService.findMatchingOpdId(initialSipdItem, allOpds) || activeOpd.opd_id
-          : activeOpd.opd_id;
-      const targetOpd = allOpds.find((o) => o.opd_id === matchedOpdId) || activeOpd;
-      const isSipdValidForOpd =
-        initialSipdItem && SipdService.matchesActiveOpd(initialSipdItem, targetOpd);
+      if (initialRow) {
+        setSelectedOpdId(initialRow.opd_id);
+        setStrategi(initialRow.strategi || STRATEGI_OPPKPKE_LIST[0]);
+        setKodeRekening(initialRow.kode || '');
+        setKodeProgram('');
+        setProgram(initialRow.program || '');
+        setKodeKegiatan('');
+        setKegiatan(initialRow.kegiatan || '');
+        setSubKegiatan(initialRow.sub_kegiatan || '');
 
-      setSelectedOpdId(matchedOpdId);
-      setStrategi(STRATEGI_OPPKPKE_LIST[0]);
-      setKodeProgram(isSipdValidForOpd ? initialSipdItem.kode_program : '');
-      setProgram(isSipdValidForOpd ? initialSipdItem.nama_program : '');
-      setKodeKegiatan(isSipdValidForOpd ? initialSipdItem.kode_kegiatan : '');
-      setKegiatan(isSipdValidForOpd ? initialSipdItem.nama_kegiatan : '');
-      setSubKegiatan(isSipdValidForOpd ? initialSipdItem.nama_sub_kegiatan : '');
-      setKodeRekening(isSipdValidForOpd ? initialSipdItem.kode_sub_kegiatan : '');
-      setAktivitasLangsung('');
-      setAktivitasTidakLangsung('');
-      setAktivitasPenunjang('');
-      setAlokasiAnggaran(0);
-      setSelectedSumberList(['APBD Kabupaten']);
-      setCustomSumberInput('');
-      setSifatBantuan('Berkelanjutan');
-      setLokasiKegiatan('Kabupaten Blora');
-      setDeskripsiSasaran('');
-      setBesaranManfaat('');
-      setJenisBantuan('Bantuan sosial');
-      setCustomJenisBantuan('');
-      setDurasiAngka(1);
-      setDurasiSatuan('tahun');
-      setKeteranganDurasiBantuan('');
-      setRealisasiSem1(0);
-      setRincianRealisasiSem1('');
-      setRealisasiSem2(0);
-      setRincianRealisasiSem2('');
+        setAktivitasLangsung(initialRow.aktivitas_real_langsung || '');
+        setAktivitasTidakLangsung(initialRow.aktivitas_real_tidak_langsung || '');
+        setAktivitasPenunjang(initialRow.aktivitas_real_penunjang || '');
+        setAktivitasLangsungSem2(initialRow.aktivitas_real_langsung_sem2 || '');
+        setAktivitasTidakLangsungSem2(initialRow.aktivitas_real_tidak_langsung_sem2 || '');
+        setAktivitasPenunjangSem2(initialRow.aktivitas_real_penunjang_sem2 || '');
+        setAlokasiAnggaran(initialRow.alokasi_anggaran || 0);
+
+        const rawSumber = initialRow.sumber_pembiayaan || 'APBD Kabupaten';
+        const parsedSumber = rawSumber
+          .split(/[,+]/)
+          .map((s) => s.trim())
+          .filter(Boolean);
+        setSelectedSumberList(parsedSumber.length > 0 ? parsedSumber : ['APBD Kabupaten']);
+        setCustomSumberInput('');
+
+        const hasPerubahan =
+          (Number(initialRow.alokasi_anggaran_perubahan) || 0) > 0 ||
+          Boolean(initialRow.sumber_pembiayaan_perubahan?.trim());
+        setShowAnggaranPerubahan(hasPerubahan);
+        setAlokasiAnggaranPerubahan(Number(initialRow.alokasi_anggaran_perubahan) || 0);
+        const rawSumberPerubahan =
+          initialRow.sumber_pembiayaan_perubahan?.trim() || 'APBDP Kabupaten';
+        const parsedSumberPerubahan = rawSumberPerubahan
+          .split(/[,+]/)
+          .map((s) => s.trim())
+          .filter(Boolean);
+        setSelectedSumberPerubahanList(
+          parsedSumberPerubahan.length > 0 ? parsedSumberPerubahan : ['APBDP Kabupaten']
+        );
+        setCustomSumberPerubahanInput('');
+
+        setSifatBantuan(initialRow.sifat_bantuan || 'Berkelanjutan');
+        setLokasiKegiatan(
+          initialRow.lokasi ||
+            [initialRow.lokasi_kecamatan, initialRow.lokasi_desa, initialRow.lokasi_spesifik]
+              .filter(Boolean)
+              .join(' · ') ||
+            'Kabupaten Blora'
+        );
+
+        const initialDeskripsiSasaran =
+          initialRow.keterangan_sasaran?.trim() ||
+          (initialRow.jumlah_sasaran > 0
+            ? `${formatNumber(initialRow.jumlah_sasaran)} ${initialRow.satuan_sasaran || 'KPM'}`
+            : '');
+        setDeskripsiSasaran(initialDeskripsiSasaran);
+        setBesaranManfaat(initialRow.besaran_manfaat || '');
+
+        if (
+          JENIS_BANTUAN_OPTIONS.includes(initialRow.jenis_bantuan) ||
+          !initialRow.jenis_bantuan
+        ) {
+          setJenisBantuan(initialRow.jenis_bantuan || 'Bantuan sosial');
+          setCustomJenisBantuan('');
+        } else {
+          setJenisBantuan('Bantuan lainnya');
+          setCustomJenisBantuan(initialRow.jenis_bantuan);
+        }
+
+        const parsedDurasi = parseDurasiString(initialRow.durasi_pemberian_bantuan);
+        setDurasiAngka(parsedDurasi.angka);
+        setDurasiSatuan(parsedDurasi.satuan);
+        setKeteranganDurasiBantuan(initialRow.keterangan_durasi_bantuan || '');
+
+        setSifatBantuanSem2(initialRow.sifat_bantuan_sem2 || 'Berkelanjutan');
+        setLokasiKegiatanSem2(initialRow.lokasi_sem2 || '');
+        const initialDeskripsiSasaranSem2 =
+          initialRow.keterangan_sasaran_sem2?.trim() ||
+          ((initialRow.jumlah_sasaran_sem2 || 0) > 0
+            ? `${formatNumber(initialRow.jumlah_sasaran_sem2 || 0)} ${
+                initialRow.satuan_sasaran_sem2 || 'KPM'
+              }`
+            : '');
+        setDeskripsiSasaranSem2(initialDeskripsiSasaranSem2);
+        setBesaranManfaatSem2(initialRow.besaran_manfaat_sem2 || '');
+        if (
+          JENIS_BANTUAN_OPTIONS.includes(initialRow.jenis_bantuan_sem2 || '') ||
+          !initialRow.jenis_bantuan_sem2
+        ) {
+          setJenisBantuanSem2(initialRow.jenis_bantuan_sem2 || 'Bantuan sosial');
+          setCustomJenisBantuanSem2('');
+        } else {
+          setJenisBantuanSem2('Bantuan lainnya');
+          setCustomJenisBantuanSem2(initialRow.jenis_bantuan_sem2);
+        }
+        const parsedDurasiSem2 = parseDurasiString(initialRow.durasi_pemberian_bantuan_sem2);
+        setDurasiAngkaSem2(parsedDurasiSem2.angka);
+        setDurasiSatuanSem2(parsedDurasiSem2.satuan);
+        setKeteranganDurasiBantuanSem2(initialRow.keterangan_durasi_bantuan_sem2 || '');
+
+        setRealisasiSem1(initialRow.sem1.realisasi || 0);
+        setRincianRealisasiSem1(initialRow.sem1.rincian_realisasi || '');
+        setRealisasiSem2(initialRow.sem2.realisasi || 0);
+        setRincianRealisasiSem2(initialRow.sem2.rincian_realisasi || '');
+      } else {
+        // Default untuk Tambah Baris Baru oleh Instansi (OPD) atau Admin
+        const matchedOpdId =
+          userRole === 'ADMIN' && initialSipdItem
+            ? SipdService.findMatchingOpdId(initialSipdItem, allOpds) || activeOpd.opd_id
+            : activeOpd.opd_id;
+        const targetOpd = allOpds.find((o) => o.opd_id === matchedOpdId) || activeOpd;
+        const isSipdValidForOpd =
+          initialSipdItem && SipdService.matchesActiveOpd(initialSipdItem, targetOpd);
+
+        setSelectedOpdId(matchedOpdId);
+        setStrategi(STRATEGI_OPPKPKE_LIST[0]);
+        setKodeProgram(isSipdValidForOpd ? initialSipdItem.kode_program : '');
+        setProgram(isSipdValidForOpd ? initialSipdItem.nama_program : '');
+        setKodeKegiatan(isSipdValidForOpd ? initialSipdItem.kode_kegiatan : '');
+        setKegiatan(isSipdValidForOpd ? initialSipdItem.nama_kegiatan : '');
+        setSubKegiatan(isSipdValidForOpd ? initialSipdItem.nama_sub_kegiatan : '');
+        setKodeRekening(isSipdValidForOpd ? initialSipdItem.kode_sub_kegiatan : '');
+        setAktivitasLangsung('');
+        setAktivitasTidakLangsung('');
+        setAktivitasPenunjang('');
+        setAktivitasLangsungSem2('');
+        setAktivitasTidakLangsungSem2('');
+        setAktivitasPenunjangSem2('');
+        setAlokasiAnggaran(0);
+        setSelectedSumberList(['APBD Kabupaten']);
+        setCustomSumberInput('');
+        setShowAnggaranPerubahan(false);
+        setAlokasiAnggaranPerubahan(0);
+        setSelectedSumberPerubahanList(['APBDP Kabupaten']);
+        setCustomSumberPerubahanInput('');
+        setSifatBantuan('Berkelanjutan');
+        setLokasiKegiatan('Kabupaten Blora');
+        setDeskripsiSasaran('');
+        setBesaranManfaat('');
+        setJenisBantuan('Bantuan sosial');
+        setCustomJenisBantuan('');
+        setDurasiAngka(1);
+        setDurasiSatuan('tahun');
+        setKeteranganDurasiBantuan('');
+        setSifatBantuanSem2('Berkelanjutan');
+        setLokasiKegiatanSem2('');
+        setDeskripsiSasaranSem2('');
+        setBesaranManfaatSem2('');
+        setJenisBantuanSem2('Bantuan sosial');
+        setCustomJenisBantuanSem2('');
+        setDurasiAngkaSem2(1);
+        setDurasiSatuanSem2('tahun');
+        setKeteranganDurasiBantuanSem2('');
+        setRealisasiSem1(0);
+        setRincianRealisasiSem1('');
+        setRealisasiSem2(0);
+        setRincianRealisasiSem2('');
+      }
     }
 
     setOpenSipdDropdown(null);
@@ -321,7 +536,126 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
     void SipdService.loadSipdDataset().then((res) => {
       setSipdList(res.uniqueRows);
     });
-  }, [isOpen, initialRow, initialSipdItem, activeOpd, allOpds, userRole]);
+  }, [
+    isOpen,
+    activeModalSessionKey,
+    draftStorageKey,
+    initialRow,
+    initialSipdItem,
+    activeOpd,
+    allOpds,
+    userRole,
+  ]);
+
+  // Simpan progres pengisian sementara secara otomatis ke sessionStorage selama modal terbuka
+  useEffect(() => {
+    if (!isOpen || !draftStorageKey || initializedSessionKeyRef.current !== activeModalSessionKey) {
+      return;
+    }
+    try {
+      sessionStorage.setItem(
+        draftStorageKey,
+        JSON.stringify({
+          baseUpdatedAt: initialRow?.updated_at || null,
+          currentStep,
+          selectedOpdId,
+          strategi,
+          kodeProgram,
+          program,
+          kodeKegiatan,
+          kegiatan,
+          subKegiatan,
+          kodeRekening,
+          aktivitasLangsung,
+          aktivitasTidakLangsung,
+          aktivitasPenunjang,
+          aktivitasLangsungSem2,
+          aktivitasTidakLangsungSem2,
+          aktivitasPenunjangSem2,
+          alokasiAnggaran,
+          selectedSumberList,
+          customSumberInput,
+          showAnggaranPerubahan,
+          alokasiAnggaranPerubahan,
+          selectedSumberPerubahanList,
+          customSumberPerubahanInput,
+          sifatBantuan,
+          lokasiKegiatan,
+          deskripsiSasaran,
+          besaranManfaat,
+          jenisBantuan,
+          customJenisBantuan,
+          durasiAngka,
+          durasiSatuan,
+          keteranganDurasiBantuan,
+          sifatBantuanSem2,
+          lokasiKegiatanSem2,
+          deskripsiSasaranSem2,
+          besaranManfaatSem2,
+          jenisBantuanSem2,
+          customJenisBantuanSem2,
+          durasiAngkaSem2,
+          durasiSatuanSem2,
+          keteranganDurasiBantuanSem2,
+          realisasiSem1,
+          rincianRealisasiSem1,
+          realisasiSem2,
+          rincianRealisasiSem2,
+        })
+      );
+    } catch {
+      // ignore storage quota errors
+    }
+  }, [
+    isOpen,
+    draftStorageKey,
+    activeModalSessionKey,
+    initialRow?.updated_at,
+    currentStep,
+    selectedOpdId,
+    strategi,
+    kodeProgram,
+    program,
+    kodeKegiatan,
+    kegiatan,
+    subKegiatan,
+    kodeRekening,
+    aktivitasLangsung,
+    aktivitasTidakLangsung,
+    aktivitasPenunjang,
+    aktivitasLangsungSem2,
+    aktivitasTidakLangsungSem2,
+    aktivitasPenunjangSem2,
+    alokasiAnggaran,
+    selectedSumberList,
+    customSumberInput,
+    showAnggaranPerubahan,
+    alokasiAnggaranPerubahan,
+    selectedSumberPerubahanList,
+    customSumberPerubahanInput,
+    sifatBantuan,
+    lokasiKegiatan,
+    deskripsiSasaran,
+    besaranManfaat,
+    jenisBantuan,
+    customJenisBantuan,
+    durasiAngka,
+    durasiSatuan,
+    keteranganDurasiBantuan,
+    sifatBantuanSem2,
+    lokasiKegiatanSem2,
+    deskripsiSasaranSem2,
+    besaranManfaatSem2,
+    jenisBantuanSem2,
+    customJenisBantuanSem2,
+    durasiAngkaSem2,
+    durasiSatuanSem2,
+    keteranganDurasiBantuanSem2,
+    realisasiSem1,
+    rincianRealisasiSem1,
+    realisasiSem2,
+    rincianRealisasiSem2,
+  ]);
 
   // Instansi target yang aktif untuk isolasi Kode SIPD (100% Anti Salah Kamar)
   const targetOpdForSipd = useMemo(() => {
@@ -493,6 +827,11 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
     return selectedSumberList.join(', ');
   }, [selectedSumberList]);
 
+  const finalSumberPembiayaanPerubahan = useMemo(() => {
+    if (selectedSumberPerubahanList.length === 0) return 'APBDP Kabupaten';
+    return selectedSumberPerubahanList.join(', ');
+  }, [selectedSumberPerubahanList]);
+
   const toggleSumberPendanaan = (item: string) => {
     setSelectedSumberList((prev) => {
       if (prev.includes(item)) {
@@ -511,17 +850,180 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
     setCustomSumberInput('');
   };
 
+  const toggleSumberPendanaanPerubahan = (item: string) => {
+    setSelectedSumberPerubahanList((prev) => {
+      if (prev.includes(item)) {
+        return prev.length > 1 ? prev.filter((x) => x !== item) : prev;
+      }
+      return [...prev, item];
+    });
+  };
+
+  const handleAddCustomSumberPerubahan = () => {
+    const clean = customSumberPerubahanInput.trim();
+    if (!clean) return;
+    if (!selectedSumberPerubahanList.includes(clean)) {
+      setSelectedSumberPerubahanList((prev) => [...prev, clean]);
+    }
+    setCustomSumberPerubahanInput('');
+  };
+
+  // Daftar baris Semester 1 milik instansi aktif untuk diedit pada Semester 2 sesuai Nama Kegiatan & Sub Kegiatan
+  const opdExistingSem1Rows = useMemo(() => {
+    const targetOpdId = userRole === 'ADMIN' ? selectedOpdId : activeOpd.opd_id;
+    return existingRows.filter(
+      (r) => r.periode_id === activePeriode.periode_id && r.opd_id === targetOpdId
+    );
+  }, [existingRows, activePeriode.periode_id, userRole, selectedOpdId, activeOpd.opd_id]);
+
+  const applyExistingRowToForm = useCallback((row: EnrichedMatrixRow) => {
+    setMatchedSem1Row(row);
+    setSelectedOpdId(row.opd_id);
+    setStrategi(row.strategi || STRATEGI_OPPKPKE_LIST[0]);
+    setKodeRekening(row.kode || '');
+    setProgram(row.program || '');
+    setKegiatan(row.kegiatan || '');
+    setSubKegiatan(row.sub_kegiatan || '');
+
+    setAktivitasLangsung(row.aktivitas_real_langsung || '');
+    setAktivitasTidakLangsung(row.aktivitas_real_tidak_langsung || '');
+    setAktivitasPenunjang(row.aktivitas_real_penunjang || '');
+    setAktivitasLangsungSem2(row.aktivitas_real_langsung_sem2 || '');
+    setAktivitasTidakLangsungSem2(row.aktivitas_real_tidak_langsung_sem2 || '');
+    setAktivitasPenunjangSem2(row.aktivitas_real_penunjang_sem2 || '');
+    setAlokasiAnggaran(row.alokasi_anggaran || 0);
+
+    const rawSumber = row.sumber_pembiayaan || 'APBD Kabupaten';
+    const parsedSumber = rawSumber
+      .split(/[,+]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    setSelectedSumberList(parsedSumber.length > 0 ? parsedSumber : ['APBD Kabupaten']);
+    setCustomSumberInput('');
+
+    const hasPerubahan =
+      (Number(row.alokasi_anggaran_perubahan) || 0) > 0 ||
+      Boolean(row.sumber_pembiayaan_perubahan?.trim());
+    setShowAnggaranPerubahan(hasPerubahan);
+    setAlokasiAnggaranPerubahan(Number(row.alokasi_anggaran_perubahan) || 0);
+    const rawSumberPerubahan =
+      row.sumber_pembiayaan_perubahan?.trim() || 'APBDP Kabupaten';
+    const parsedSumberPerubahan = rawSumberPerubahan
+      .split(/[,+]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    setSelectedSumberPerubahanList(
+      parsedSumberPerubahan.length > 0 ? parsedSumberPerubahan : ['APBDP Kabupaten']
+    );
+    setCustomSumberPerubahanInput('');
+
+    setSifatBantuan(row.sifat_bantuan || 'Berkelanjutan');
+    setLokasiKegiatan(
+      row.lokasi ||
+        [row.lokasi_kecamatan, row.lokasi_desa, row.lokasi_spesifik]
+          .filter(Boolean)
+          .join(' · ') ||
+        'Kabupaten Blora'
+    );
+
+    const descSasaran =
+      row.keterangan_sasaran?.trim() ||
+      (row.jumlah_sasaran > 0
+        ? `${formatNumber(row.jumlah_sasaran)} ${row.satuan_sasaran || 'KPM'}`
+        : '');
+    setDeskripsiSasaran(descSasaran);
+    setBesaranManfaat(row.besaran_manfaat || '');
+
+    if (JENIS_BANTUAN_OPTIONS.includes(row.jenis_bantuan) || !row.jenis_bantuan) {
+      setJenisBantuan(row.jenis_bantuan || 'Bantuan sosial');
+      setCustomJenisBantuan('');
+    } else {
+      setJenisBantuan('Bantuan lainnya');
+      setCustomJenisBantuan(row.jenis_bantuan);
+    }
+
+    const parsedDurasi = parseDurasiString(row.durasi_pemberian_bantuan);
+    setDurasiAngka(parsedDurasi.angka);
+    setDurasiSatuan(parsedDurasi.satuan);
+    setKeteranganDurasiBantuan(row.keterangan_durasi_bantuan || '');
+
+    setSifatBantuanSem2(row.sifat_bantuan_sem2 || 'Berkelanjutan');
+    setLokasiKegiatanSem2(row.lokasi_sem2 || '');
+    const descSasaranSem2 =
+      row.keterangan_sasaran_sem2?.trim() ||
+      ((row.jumlah_sasaran_sem2 || 0) > 0
+        ? `${formatNumber(row.jumlah_sasaran_sem2 || 0)} ${
+            row.satuan_sasaran_sem2 || 'KPM'
+          }`
+        : '');
+    setDeskripsiSasaranSem2(descSasaranSem2);
+    setBesaranManfaatSem2(row.besaran_manfaat_sem2 || '');
+    if (
+      JENIS_BANTUAN_OPTIONS.includes(row.jenis_bantuan_sem2 || '') ||
+      !row.jenis_bantuan_sem2
+    ) {
+      setJenisBantuanSem2(row.jenis_bantuan_sem2 || 'Bantuan sosial');
+      setCustomJenisBantuanSem2('');
+    } else {
+      setJenisBantuanSem2('Bantuan lainnya');
+      setCustomJenisBantuanSem2(row.jenis_bantuan_sem2);
+    }
+    const parsedDurasiSem2 = parseDurasiString(row.durasi_pemberian_bantuan_sem2);
+    setDurasiAngkaSem2(parsedDurasiSem2.angka);
+    setDurasiSatuanSem2(parsedDurasiSem2.satuan);
+    setKeteranganDurasiBantuanSem2(row.keterangan_durasi_bantuan_sem2 || '');
+
+    setRealisasiSem1(row.sem1.realisasi || 0);
+    setRincianRealisasiSem1(row.sem1.rincian_realisasi || '');
+    setRealisasiSem2(row.sem2.realisasi || 0);
+    setRincianRealisasiSem2(row.sem2.rincian_realisasi || '');
+  }, []);
+
+  const handlePullSem1ActivitiesToSem2 = () => {
+    setAktivitasLangsungSem2(aktivitasLangsung);
+    setAktivitasTidakLangsungSem2(aktivitasTidakLangsung);
+    setAktivitasPenunjangSem2(aktivitasPenunjang);
+  };
+
+  const handlePullSem1KarakteristikToSem2 = () => {
+    setSifatBantuanSem2(sifatBantuan || 'Berkelanjutan');
+    setLokasiKegiatanSem2(lokasiKegiatan);
+    setDeskripsiSasaranSem2(deskripsiSasaran);
+    setBesaranManfaatSem2(besaranManfaat);
+    setJenisBantuanSem2(jenisBantuan);
+    setCustomJenisBantuanSem2(customJenisBantuan);
+    setDurasiAngkaSem2(durasiAngka);
+    setDurasiSatuanSem2(durasiSatuan);
+    setKeteranganDurasiBantuanSem2(keteranganDurasiBantuan);
+  };
+
   const finalJenisBantuan =
     jenisBantuan === 'Bantuan lainnya'
       ? customJenisBantuan.trim() || 'Bantuan lainnya'
       : jenisBantuan;
 
+  const finalJenisBantuanSem2 =
+    jenisBantuanSem2 === 'Bantuan lainnya'
+      ? customJenisBantuanSem2.trim() || 'Bantuan lainnya'
+      : jenisBantuanSem2;
+
   // Jika status Terverifikasi, otomatis OPD tidak bisa mengubah data terverifikasi tersebut (terkunci)
-  const isSem1Locked =
-    userRole === 'OPD' && initialRow?.sem1.status_verifikasi === 'Terverifikasi';
+  const isSem1Verified = effectiveRow?.sem1.status_verifikasi === 'Terverifikasi';
+  const isSem1Locked = userRole === 'OPD' && isSem1Verified;
   const isSem2Locked =
-    userRole === 'OPD' && initialRow?.sem2.status_verifikasi === 'Terverifikasi';
+    userRole === 'OPD' && effectiveRow?.sem2.status_verifikasi === 'Terverifikasi';
   const isActiveSemesterLocked = selectedSemester === 1 ? isSem1Locked : isSem2Locked;
+
+  // Pada pengisian Semester 2, Katalog Nomenklatur SIPD dikunci sesuai Semester 1
+  const isSipdCatalogLocked = selectedSemester === 2;
+
+  // Pada pengisian Semester 2, Alokasi Anggaran & Sumber Pendanaan Semester 1 terkunci apabila Semester 1 sudah Terverifikasi Admin
+  const isSem1BudgetLocked = selectedSemester === 2 && Boolean(isSem1Verified);
+
+  const effectiveAlokasiForSem2 =
+    showAnggaranPerubahan && alokasiAnggaranPerubahan > 0
+      ? alokasiAnggaranPerubahan
+      : alokasiAnggaran;
 
   const activeSemRealisasi = selectedSemester === 1 ? realisasiSem1 : realisasiSem2;
 
@@ -530,13 +1032,20 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
     strategi && kodeRekening.trim() && program.trim() && kegiatan.trim() && subKegiatan.trim()
   );
   // Pengisian aktivitas real cukup mengisi salah satu (Langsung, Tidak Langsung, atau Penunjang)
-  const hasAktivitas = Boolean(
+  const hasSem1Aktivitas = Boolean(
     aktivitasLangsung.trim() ||
       aktivitasTidakLangsung.trim() ||
       aktivitasPenunjang.trim()
   );
+  const hasSem2Aktivitas = Boolean(
+    aktivitasLangsungSem2.trim() ||
+      aktivitasTidakLangsungSem2.trim() ||
+      aktivitasPenunjangSem2.trim()
+  );
+  const hasAktivitas = selectedSemester === 2 ? hasSem2Aktivitas || hasSem1Aktivitas : hasSem1Aktivitas;
+
   const step2Done = Boolean(hasAktivitas && alokasiAnggaran > 0 && selectedSumberList.length > 0);
-  const step3Done = Boolean(
+  const step3Sem1Done = Boolean(
     sifatBantuan &&
       lokasiKegiatan.trim() &&
       deskripsiSasaran.trim() &&
@@ -544,6 +1053,15 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
       finalJenisBantuan.trim() &&
       durasiBantuan.trim()
   );
+  const step3Sem2Done = Boolean(
+    sifatBantuanSem2 &&
+      lokasiKegiatanSem2.trim() &&
+      deskripsiSasaranSem2.trim() &&
+      besaranManfaatSem2.trim() &&
+      finalJenisBantuanSem2.trim() &&
+      durasiBantuanSem2.trim()
+  );
+  const step3Done = selectedSemester === 2 ? step3Sem2Done || step3Sem1Done : step3Sem1Done;
   const step4Done = Boolean(
     selectedSemester === 1 ? realisasiSem1 > 0 : realisasiSem1 > 0 || realisasiSem2 > 0
   );
@@ -557,8 +1075,22 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
     if (hasAktivitas) score += 1;
     if (alokasiAnggaran > 0) score += 1;
     if (selectedSumberList.length > 0) score += 1;
-    if (deskripsiSasaran.trim() && lokasiKegiatan.trim()) score += 1;
-    if (besaranManfaat.trim() && finalJenisBantuan.trim()) score += 1;
+    if (
+      selectedSemester === 2
+        ? (deskripsiSasaranSem2.trim() || deskripsiSasaran.trim()) &&
+          (lokasiKegiatanSem2.trim() || lokasiKegiatan.trim())
+        : deskripsiSasaran.trim() && lokasiKegiatan.trim()
+    ) {
+      score += 1;
+    }
+    if (
+      selectedSemester === 2
+        ? (besaranManfaatSem2.trim() || besaranManfaat.trim()) &&
+          (finalJenisBantuanSem2.trim() || finalJenisBantuan.trim())
+        : besaranManfaat.trim() && finalJenisBantuan.trim()
+    ) {
+      score += 1;
+    }
     if (activeSemRealisasi > 0) score += 1;
     return Math.round((score / maxScore) * 100);
   }, [
@@ -569,10 +1101,15 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
     hasAktivitas,
     alokasiAnggaran,
     selectedSumberList,
+    selectedSemester,
     deskripsiSasaran,
+    deskripsiSasaranSem2,
     lokasiKegiatan,
+    lokasiKegiatanSem2,
     besaranManfaat,
+    besaranManfaatSem2,
     finalJenisBantuan,
+    finalJenisBantuanSem2,
     activeSemRealisasi,
   ]);
 
@@ -615,11 +1152,11 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
     },
   ];
 
-  const sem1Logs = initialRow
-    ? auditLogs.filter((l) => l.matrix_id === initialRow.matrix_id && l.semester === 1)
+  const sem1Logs = effectiveRow
+    ? auditLogs.filter((l) => l.matrix_id === effectiveRow.matrix_id && l.semester === 1)
     : [];
-  const sem2Logs = initialRow
-    ? auditLogs.filter((l) => l.matrix_id === initialRow.matrix_id && l.semester === 2)
+  const sem2Logs = effectiveRow
+    ? auditLogs.filter((l) => l.matrix_id === effectiveRow.matrix_id && l.semester === 2)
     : [];
 
   const triggerSave = (
@@ -631,36 +1168,158 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
     const cleanDeskripsiSasaran = deskripsiSasaran.trim();
     const numericSasaran = extractNumericSasaranFromDescription(
       cleanDeskripsiSasaran,
-      initialRow?.jumlah_sasaran ?? 0
+      effectiveRow?.jumlah_sasaran ?? 0
     );
 
+    const cleanLokasiSem2 = lokasiKegiatanSem2.trim();
+    const cleanDeskripsiSasaranSem2 = deskripsiSasaranSem2.trim();
+    const numericSasaranSem2 = extractNumericSasaranFromDescription(
+      cleanDeskripsiSasaranSem2,
+      effectiveRow?.jumlah_sasaran_sem2 ?? 0
+    );
+
+    const hasValidPerubahan =
+      selectedSemester === 2 && showAnggaranPerubahan && alokasiAnggaranPerubahan > 0;
+
     onSave({
-      matrix_id: initialRow ? initialRow.matrix_id : null,
+      matrix_id: effectiveRow ? effectiveRow.matrix_id : null,
       periode_id: activePeriode.periode_id,
       opd_id: userRole === 'ADMIN' ? selectedOpdId : activeOpd.opd_id,
       opdUpdates: {
         strategi,
-        kode: kodeRekening.trim() || '1.00.01.2.01.0001',
-        program: program.trim() || 'Program Penanggulangan Kemiskinan Daerah',
-        kegiatan: kegiatan.trim() || 'Kegiatan Intervensi Kemiskinan Ekstrem',
-        sub_kegiatan: subKegiatan.trim() || 'Sub Kegiatan Penanganan Kemiskinan',
-        aktivitas_real_langsung: aktivitasLangsung,
-        aktivitas_real_tidak_langsung: aktivitasTidakLangsung,
-        aktivitas_real_penunjang: aktivitasPenunjang,
-        alokasi_anggaran: alokasiAnggaran,
-        sumber_pembiayaan: finalSumberPembiayaan,
-        sifat_bantuan: sifatBantuan,
-        lokasi: cleanLokasi,
-        lokasi_kecamatan: cleanLokasi,
-        lokasi_desa: '',
-        lokasi_spesifik: cleanLokasi,
-        jumlah_sasaran: numericSasaran,
-        satuan_sasaran: initialRow?.satuan_sasaran || 'KPM',
-        keterangan_sasaran: cleanDeskripsiSasaran,
-        besaran_manfaat: besaranManfaat,
-        jenis_bantuan: finalJenisBantuan,
-        durasi_pemberian_bantuan: durasiBantuan,
-        keterangan_durasi_bantuan: keteranganDurasiBantuan.trim(),
+        kode:
+          isSipdCatalogLocked && effectiveRow
+            ? effectiveRow.kode
+            : kodeRekening.trim() || '1.00.01.2.01.0001',
+        program:
+          isSipdCatalogLocked && effectiveRow
+            ? effectiveRow.program
+            : program.trim() || 'Program Penanggulangan Kemiskinan Daerah',
+        kegiatan:
+          isSipdCatalogLocked && effectiveRow
+            ? effectiveRow.kegiatan
+            : kegiatan.trim() || 'Kegiatan Intervensi Kemiskinan Ekstrem',
+        sub_kegiatan:
+          isSipdCatalogLocked && effectiveRow
+            ? effectiveRow.sub_kegiatan
+            : subKegiatan.trim() || 'Sub Kegiatan Penanganan Kemiskinan',
+        aktivitas_real_langsung:
+          selectedSemester === 2 && effectiveRow
+            ? effectiveRow.aktivitas_real_langsung
+            : aktivitasLangsung,
+        aktivitas_real_tidak_langsung:
+          selectedSemester === 2 && effectiveRow
+            ? effectiveRow.aktivitas_real_tidak_langsung
+            : aktivitasTidakLangsung,
+        aktivitas_real_penunjang:
+          selectedSemester === 2 && effectiveRow
+            ? effectiveRow.aktivitas_real_penunjang
+            : aktivitasPenunjang,
+        aktivitas_real_langsung_sem2:
+          selectedSemester === 2
+            ? aktivitasLangsungSem2
+            : effectiveRow?.aktivitas_real_langsung_sem2 || '',
+        aktivitas_real_tidak_langsung_sem2:
+          selectedSemester === 2
+            ? aktivitasTidakLangsungSem2
+            : effectiveRow?.aktivitas_real_tidak_langsung_sem2 || '',
+        aktivitas_real_penunjang_sem2:
+          selectedSemester === 2
+            ? aktivitasPenunjangSem2
+            : effectiveRow?.aktivitas_real_penunjang_sem2 || '',
+        alokasi_anggaran: isSem1BudgetLocked && effectiveRow ? effectiveRow.alokasi_anggaran : alokasiAnggaran,
+        sumber_pembiayaan:
+          isSem1BudgetLocked && effectiveRow ? effectiveRow.sumber_pembiayaan : finalSumberPembiayaan,
+        alokasi_anggaran_perubahan:
+          selectedSemester === 2
+            ? hasValidPerubahan
+              ? alokasiAnggaranPerubahan
+              : 0
+            : effectiveRow?.alokasi_anggaran_perubahan || 0,
+        sumber_pembiayaan_perubahan:
+          selectedSemester === 2
+            ? hasValidPerubahan
+              ? finalSumberPembiayaanPerubahan
+              : ''
+            : effectiveRow?.sumber_pembiayaan_perubahan || '',
+        sifat_bantuan:
+          selectedSemester === 2 && effectiveRow
+            ? effectiveRow.sifat_bantuan
+            : sifatBantuan,
+        lokasi:
+          selectedSemester === 2 && effectiveRow
+            ? effectiveRow.lokasi
+            : cleanLokasi,
+        lokasi_kecamatan:
+          selectedSemester === 2 && effectiveRow
+            ? effectiveRow.lokasi_kecamatan || effectiveRow.lokasi
+            : cleanLokasi,
+        lokasi_desa:
+          selectedSemester === 2 && effectiveRow
+            ? effectiveRow.lokasi_desa || ''
+            : '',
+        lokasi_spesifik:
+          selectedSemester === 2 && effectiveRow
+            ? effectiveRow.lokasi_spesifik || effectiveRow.lokasi
+            : cleanLokasi,
+        jumlah_sasaran:
+          selectedSemester === 2 && effectiveRow
+            ? effectiveRow.jumlah_sasaran
+            : numericSasaran,
+        satuan_sasaran: effectiveRow?.satuan_sasaran || 'KPM',
+        keterangan_sasaran:
+          selectedSemester === 2 && effectiveRow
+            ? effectiveRow.keterangan_sasaran || ''
+            : cleanDeskripsiSasaran,
+        besaran_manfaat:
+          selectedSemester === 2 && effectiveRow
+            ? effectiveRow.besaran_manfaat
+            : besaranManfaat,
+        jenis_bantuan:
+          selectedSemester === 2 && effectiveRow
+            ? effectiveRow.jenis_bantuan
+            : finalJenisBantuan,
+        durasi_pemberian_bantuan:
+          selectedSemester === 2 && effectiveRow
+            ? effectiveRow.durasi_pemberian_bantuan
+            : durasiBantuan,
+        keterangan_durasi_bantuan:
+          selectedSemester === 2 && effectiveRow
+            ? effectiveRow.keterangan_durasi_bantuan || ''
+            : keteranganDurasiBantuan.trim(),
+        sifat_bantuan_sem2:
+          selectedSemester === 2
+            ? sifatBantuanSem2
+            : effectiveRow?.sifat_bantuan_sem2 || '',
+        lokasi_sem2:
+          selectedSemester === 2
+            ? cleanLokasiSem2
+            : effectiveRow?.lokasi_sem2 || '',
+        jumlah_sasaran_sem2:
+          selectedSemester === 2
+            ? numericSasaranSem2
+            : effectiveRow?.jumlah_sasaran_sem2 || 0,
+        satuan_sasaran_sem2: effectiveRow?.satuan_sasaran_sem2 || 'KPM',
+        keterangan_sasaran_sem2:
+          selectedSemester === 2
+            ? cleanDeskripsiSasaranSem2
+            : effectiveRow?.keterangan_sasaran_sem2 || '',
+        besaran_manfaat_sem2:
+          selectedSemester === 2
+            ? besaranManfaatSem2.trim()
+            : effectiveRow?.besaran_manfaat_sem2 || '',
+        jenis_bantuan_sem2:
+          selectedSemester === 2
+            ? finalJenisBantuanSem2
+            : effectiveRow?.jenis_bantuan_sem2 || '',
+        durasi_pemberian_bantuan_sem2:
+          selectedSemester === 2
+            ? durasiBantuanSem2
+            : effectiveRow?.durasi_pemberian_bantuan_sem2 || '',
+        keterangan_durasi_bantuan_sem2:
+          selectedSemester === 2
+            ? keteranganDurasiBantuanSem2.trim()
+            : effectiveRow?.keterangan_durasi_bantuan_sem2 || '',
       },
       sem1Input:
         !isSem1Locked && sem1Action !== 'none'
@@ -679,6 +1338,8 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
             }
           : undefined,
     });
+
+    clearModalDraft();
 
     if (closeAfter) {
       onClose();
@@ -870,6 +1531,48 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                       </div>
                     </div>
 
+                    {/* Panduan & Pemilih Cepat Data Semester 1 saat Mode Semester 2 */}
+                    {selectedSemester === 2 && opdExistingSem1Rows.length > 0 && (
+                      <div className="p-4 rounded-2xl bg-indigo-50/80 border border-indigo-200/90 space-y-2.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <CalendarRange className="w-4 h-4 text-indigo-700 shrink-0" />
+                            <span className="text-xs font-extrabold text-indigo-950">
+                              Pengisian Semester 2: Edit Data Sub Kegiatan & Nama Kegiatan dari Semester 1
+                            </span>
+                          </div>
+                          <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
+                            {opdExistingSem1Rows.length} Sub Kegiatan Semester 1 Tersedia
+                          </span>
+                        </div>
+                        <p className="text-xs text-indigo-900/80 leading-relaxed">
+                          Pilih Sub Kegiatan & Nama Kegiatan yang sudah diinput pada Semester 1 di bawah ini untuk melanjutkan pengisian Semester 2:
+                        </p>
+                        <select
+                          value={effectiveRow?.matrix_id || ''}
+                          onChange={(e) => {
+                            const picked = opdExistingSem1Rows.find(
+                              (r) => r.matrix_id === e.target.value
+                            );
+                            if (picked) {
+                              applyExistingRowToForm(picked);
+                            }
+                          }}
+                          className="w-full px-3.5 py-2.5 text-xs font-bold text-slate-900 bg-white border border-indigo-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-600 cursor-pointer"
+                        >
+                          <option value="">
+                            -- Pilih Sub Kegiatan & Kegiatan yang Sudah Diinput di Semester 1 --
+                          </option>
+                          {opdExistingSem1Rows.map((r) => (
+                            <option key={r.matrix_id} value={r.matrix_id}>
+                              [{r.kode}] {r.sub_kegiatan} — Kegiatan: {r.kegiatan} (Sem 1:{' '}
+                              {r.sem1.status_verifikasi})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
                     {/* Baris Identitas Instansi & Strategi OPPKPKE */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
@@ -939,6 +1642,12 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                           <span className="text-xs font-extrabold text-slate-900">
                             Katalog Nomenklatur SIPD: {targetOpdForSipd.nama_opd}
                           </span>
+                          {isSipdCatalogLocked && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 text-[10.5px] font-extrabold">
+                              <Lock className="w-3 h-3 text-amber-700" />
+                              Terkunci (Sesuai Semester 1)
+                            </span>
+                          )}
                         </div>
                         <span className="text-[11px] font-semibold text-slate-600">
                           Tersedia <strong className="text-[#1D4ED8]">{programOptions.length} Program</strong> ·{' '}
@@ -953,21 +1662,27 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                             1. Pilih Kode Program + Nama Program <span className="text-rose-600">*</span>
                           </label>
                           <span className="text-[10.5px] font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200/60">
-                            {programOptions.length} Program pada {targetOpdForSipd.singkatan}
+                            {isSipdCatalogLocked
+                              ? 'Terkunci sesuai Semester 1'
+                              : `${programOptions.length} Program pada ${targetOpdForSipd.singkatan}`}
                           </span>
                         </div>
 
                         <button
                           type="button"
-                          onClick={() =>
-                            setOpenSipdDropdown((prev) => (prev === 'program' ? null : 'program'))
-                          }
-                          className={`w-full px-3.5 py-2.5 rounded-xl border text-left transition-all flex items-center justify-between gap-3 cursor-pointer ${
-                            openSipdDropdown === 'program'
-                              ? 'bg-white border-[#2563EB] ring-2 ring-[#2563EB]/20'
+                          disabled={isSipdCatalogLocked}
+                          onClick={() => {
+                            if (isSipdCatalogLocked) return;
+                            setOpenSipdDropdown((prev) => (prev === 'program' ? null : 'program'));
+                          }}
+                          className={`w-full px-3.5 py-2.5 rounded-xl border text-left transition-all flex items-center justify-between gap-3 ${
+                            isSipdCatalogLocked
+                              ? 'bg-slate-100 border-slate-200 text-slate-600 cursor-not-allowed'
+                              : openSipdDropdown === 'program'
+                              ? 'bg-white border-[#2563EB] ring-2 ring-[#2563EB]/20 cursor-pointer'
                               : program
-                              ? 'bg-white border-indigo-300 hover:border-[#2563EB]'
-                              : 'bg-white border-slate-300 hover:border-[#2563EB]'
+                              ? 'bg-white border-indigo-300 hover:border-[#2563EB] cursor-pointer'
+                              : 'bg-white border-slate-300 hover:border-[#2563EB] cursor-pointer'
                           }`}
                         >
                           <div className="min-w-0 flex-1">
@@ -988,14 +1703,18 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                               </span>
                             )}
                           </div>
-                          <ChevronDown
-                            className={`w-4 h-4 text-slate-500 shrink-0 transition-transform ${
-                              openSipdDropdown === 'program' ? 'rotate-180 text-[#2563EB]' : ''
-                            }`}
-                          />
+                          {isSipdCatalogLocked ? (
+                            <Lock className="w-4 h-4 text-slate-400 shrink-0" />
+                          ) : (
+                            <ChevronDown
+                              className={`w-4 h-4 text-slate-500 shrink-0 transition-transform ${
+                                openSipdDropdown === 'program' ? 'rotate-180 text-[#2563EB]' : ''
+                              }`}
+                            />
+                          )}
                         </button>
 
-                        {openSipdDropdown === 'program' && (
+                        {!isSipdCatalogLocked && openSipdDropdown === 'program' && (
                           <div className="mt-1.5 p-2.5 bg-white rounded-2xl border border-blue-300 shadow-xl space-y-2 z-30">
                             <div className="relative">
                               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -1077,7 +1796,9 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                             2. Pilih Kode Kegiatan + Nama Kegiatan <span className="text-rose-600">*</span>
                           </label>
                           <span className="text-[10.5px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
-                            {program
+                            {isSipdCatalogLocked
+                              ? 'Terkunci sesuai Semester 1'
+                              : program
                               ? `${kegiatanOptions.length} Kegiatan sesuai Program`
                               : 'Pilih Program terlebih dahulu'}
                           </span>
@@ -1085,13 +1806,14 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
 
                         <button
                           type="button"
-                          disabled={!program}
-                          onClick={() =>
-                            setOpenSipdDropdown((prev) => (prev === 'kegiatan' ? null : 'kegiatan'))
-                          }
+                          disabled={isSipdCatalogLocked || !program}
+                          onClick={() => {
+                            if (isSipdCatalogLocked) return;
+                            setOpenSipdDropdown((prev) => (prev === 'kegiatan' ? null : 'kegiatan'));
+                          }}
                           className={`w-full px-3.5 py-2.5 rounded-xl border text-left transition-all flex items-center justify-between gap-3 ${
-                            !program
-                              ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                            isSipdCatalogLocked || !program
+                              ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed'
                               : openSipdDropdown === 'kegiatan'
                               ? 'bg-white border-[#2563EB] ring-2 ring-[#2563EB]/20 cursor-pointer'
                               : kegiatan
@@ -1119,14 +1841,18 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                               </span>
                             )}
                           </div>
-                          <ChevronDown
-                            className={`w-4 h-4 text-slate-500 shrink-0 transition-transform ${
-                              openSipdDropdown === 'kegiatan' ? 'rotate-180 text-[#2563EB]' : ''
-                            }`}
-                          />
+                          {isSipdCatalogLocked ? (
+                            <Lock className="w-4 h-4 text-slate-400 shrink-0" />
+                          ) : (
+                            <ChevronDown
+                              className={`w-4 h-4 text-slate-500 shrink-0 transition-transform ${
+                                openSipdDropdown === 'kegiatan' ? 'rotate-180 text-[#2563EB]' : ''
+                              }`}
+                            />
+                          )}
                         </button>
 
-                        {openSipdDropdown === 'kegiatan' && program && (
+                        {!isSipdCatalogLocked && openSipdDropdown === 'kegiatan' && program && (
                           <div className="mt-1.5 p-2.5 bg-white rounded-2xl border border-blue-300 shadow-xl space-y-2 z-30">
                             <div className="relative">
                               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -1205,7 +1931,9 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                             3. Pilih Kode Sub Kegiatan + Nama Sub Kegiatan <span className="text-rose-600">*</span>
                           </label>
                           <span className="text-[10.5px] font-semibold text-[#1D4ED8] bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200/60">
-                            {kegiatan
+                            {isSipdCatalogLocked
+                              ? 'Terkunci sesuai Semester 1'
+                              : kegiatan
                               ? `${subKegiatanOptions.length} Sub Kegiatan sesuai Kegiatan`
                               : 'Pilih Kegiatan terlebih dahulu'}
                           </span>
@@ -1213,15 +1941,16 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
 
                         <button
                           type="button"
-                          disabled={!program || !kegiatan}
-                          onClick={() =>
+                          disabled={isSipdCatalogLocked || !program || !kegiatan}
+                          onClick={() => {
+                            if (isSipdCatalogLocked) return;
                             setOpenSipdDropdown((prev) =>
                               prev === 'sub_kegiatan' ? null : 'sub_kegiatan'
-                            )
-                          }
+                            );
+                          }}
                           className={`w-full px-3.5 py-2.5 rounded-xl border text-left transition-all flex items-center justify-between gap-3 ${
-                            !program || !kegiatan
-                              ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                            isSipdCatalogLocked || !program || !kegiatan
+                              ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed'
                               : openSipdDropdown === 'sub_kegiatan'
                               ? 'bg-white border-[#2563EB] ring-2 ring-[#2563EB]/20 cursor-pointer'
                               : subKegiatan
@@ -1249,16 +1978,20 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                               </span>
                             )}
                           </div>
-                          <ChevronDown
-                            className={`w-4 h-4 text-slate-500 shrink-0 transition-transform ${
-                              openSipdDropdown === 'sub_kegiatan'
-                                ? 'rotate-180 text-[#2563EB]'
-                                : ''
-                            }`}
-                          />
+                          {isSipdCatalogLocked ? (
+                            <Lock className="w-4 h-4 text-slate-400 shrink-0" />
+                          ) : (
+                            <ChevronDown
+                              className={`w-4 h-4 text-slate-500 shrink-0 transition-transform ${
+                                openSipdDropdown === 'sub_kegiatan'
+                                  ? 'rotate-180 text-[#2563EB]'
+                                  : ''
+                              }`}
+                            />
+                          )}
                         </button>
 
-                        {openSipdDropdown === 'sub_kegiatan' && program && kegiatan && (
+                        {!isSipdCatalogLocked && openSipdDropdown === 'sub_kegiatan' && program && kegiatan && (
                           <div className="mt-1.5 p-2.5 bg-white rounded-2xl border border-blue-300 shadow-xl space-y-2 z-30">
                             <div className="relative">
                               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -1397,61 +2130,242 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                       </p>
                     </div>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="text-xs font-semibold text-slate-700">
-                            1. Aktivitas Real Langsung
-                          </label>
-                          <span className="text-[10px] text-slate-400">Pilihan A</span>
+                    {selectedSemester === 1 ? (
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-xs font-semibold text-slate-700">
+                              1. Aktivitas Real Langsung
+                            </label>
+                            <span className="text-[10px] text-slate-400">Pilihan A</span>
+                          </div>
+                          <textarea
+                            rows={4}
+                            value={aktivitasLangsung}
+                            onChange={(e) => setAktivitasLangsung(e.target.value)}
+                            placeholder="Uraikan aktivitas intervensi langsung kepada penerima manfaat..."
+                            className="w-full px-3.5 py-2.5 text-xs text-slate-900 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB] leading-relaxed"
+                          />
                         </div>
-                        <textarea
-                          rows={4}
-                          value={aktivitasLangsung}
-                          onChange={(e) => setAktivitasLangsung(e.target.value)}
-                          placeholder="Uraikan aktivitas intervensi langsung kepada penerima manfaat..."
-                          className="w-full px-3.5 py-2.5 text-xs text-slate-900 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB] leading-relaxed"
-                        />
-                      </div>
 
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="text-xs font-semibold text-slate-700">
-                            2. Aktivitas Real Tidak Langsung
-                          </label>
-                          <span className="text-[10px] text-slate-400">Pilihan B</span>
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-xs font-semibold text-slate-700">
+                              2. Aktivitas Real Tidak Langsung
+                            </label>
+                            <span className="text-[10px] text-slate-400">Pilihan B</span>
+                          </div>
+                          <textarea
+                            rows={4}
+                            value={aktivitasTidakLangsung}
+                            onChange={(e) => setAktivitasTidakLangsung(e.target.value)}
+                            placeholder="Uraikan verifikasi lapangan, pendampingan, atau penyuluhan..."
+                            className="w-full px-3.5 py-2.5 text-xs text-slate-900 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB] leading-relaxed"
+                          />
                         </div>
-                        <textarea
-                          rows={4}
-                          value={aktivitasTidakLangsung}
-                          onChange={(e) => setAktivitasTidakLangsung(e.target.value)}
-                          placeholder="Uraikan verifikasi lapangan, pendampingan, atau penyuluhan..."
-                          className="w-full px-3.5 py-2.5 text-xs text-slate-900 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB] leading-relaxed"
-                        />
-                      </div>
 
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="text-xs font-semibold text-slate-700">
-                            3. Aktivitas Real Penunjang
-                          </label>
-                          <span className="text-[10px] text-slate-400">Pilihan C</span>
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-xs font-semibold text-slate-700">
+                              3. Aktivitas Real Penunjang
+                            </label>
+                            <span className="text-[10px] text-slate-400">Pilihan C</span>
+                          </div>
+                          <textarea
+                            rows={4}
+                            value={aktivitasPenunjang}
+                            onChange={(e) => setAktivitasPenunjang(e.target.value)}
+                            placeholder="Uraikan rapat koordinasi, SK penetapan, dan monitoring evaluasi..."
+                            className="w-full px-3.5 py-2.5 text-xs text-slate-900 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB] leading-relaxed"
+                          />
                         </div>
-                        <textarea
-                          rows={4}
-                          value={aktivitasPenunjang}
-                          onChange={(e) => setAktivitasPenunjang(e.target.value)}
-                          placeholder="Uraikan rapat koordinasi, SK penetapan, dan monitoring evaluasi..."
-                          className="w-full px-3.5 py-2.5 text-xs text-slate-900 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB] leading-relaxed"
-                        />
                       </div>
-                    </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {/* REKAP HASIL INPUTAN AKTIVITAS REAL SEMESTER 1 (TEXT REKAPAN) */}
+                        <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/90 space-y-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200/70">
+                            <div className="flex items-center gap-2">
+                              <FileText className="w-4 h-4 text-[#2563EB] shrink-0" />
+                              <span className="text-xs font-extrabold text-slate-800">
+                                Rekap Hasil Inputan Aktivitas Real Semester 1
+                              </span>
+                            </div>
+                            <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-slate-600 bg-slate-200/70 px-2.5 py-0.5 rounded-md">
+                              <Lock className="w-3 h-3 text-slate-500" />
+                              Rekapan Semester 1
+                            </span>
+                          </div>
+
+                          {(() => {
+                            const filledSem1List = [
+                              {
+                                key: 'langsung',
+                                label: '1. Aktivitas Real Langsung (Semester 1)',
+                                badge: 'Pilihan A',
+                                value: aktivitasLangsung,
+                              },
+                              {
+                                key: 'tidak_langsung',
+                                label: '2. Aktivitas Real Tidak Langsung (Semester 1)',
+                                badge: 'Pilihan B',
+                                value: aktivitasTidakLangsung,
+                              },
+                              {
+                                key: 'penunjang',
+                                label: '3. Aktivitas Real Penunjang (Semester 1)',
+                                badge: 'Pilihan C',
+                                value: aktivitasPenunjang,
+                              },
+                            ].filter((item) => item.value.trim().length > 0);
+
+                            if (filledSem1List.length === 0) {
+                              return (
+                                <p className="text-xs text-slate-500 italic">
+                                  Belum ada aktivitas yang diisikan pada Semester 1.
+                                </p>
+                              );
+                            }
+
+                            return (
+                              <div
+                                className={`grid grid-cols-1 ${
+                                  filledSem1List.length === 1
+                                    ? 'lg:grid-cols-1'
+                                    : filledSem1List.length === 2
+                                    ? 'lg:grid-cols-2'
+                                    : 'lg:grid-cols-3'
+                                } gap-3`}
+                              >
+                                {filledSem1List.map((item) => (
+                                  <div
+                                    key={item.key}
+                                    className="p-3.5 rounded-xl bg-white border border-slate-200/90 space-y-1.5 shadow-2xs"
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-[11px] font-extrabold text-slate-700">
+                                        {item.label}
+                                      </span>
+                                      <span className="text-[10px] font-semibold text-[#2563EB] bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                                        {item.badge}
+                                      </span>
+                                    </div>
+                                    <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line">
+                                      {item.value}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
+                        </div>
+
+                        {/* ISIAN AKTIVITAS REAL SEMESTER 2 + TOMBOL TARIK SEMESTER 1 */}
+                        <div className="p-4 rounded-2xl bg-indigo-50/40 border-2 border-indigo-200/80 space-y-3.5">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                              <h4 className="text-xs font-extrabold text-indigo-950">
+                                Isian Aktivitas Real Semester 2
+                              </h4>
+                              <p className="text-[11px] text-indigo-900/75">
+                                Silakan isi aktivitas Semester 2 secara manual atau klik tombol <strong>Tarik Semester 1</strong> untuk menyalin aktivitas dari Semester 1.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={handlePullSem1ActivitiesToSem2}
+                              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer shrink-0"
+                            >
+                              <Sparkles className="w-3.5 h-3.5" />
+                              <span>Tarik Semester 1</span>
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="text-xs font-semibold text-slate-800">
+                                  1. Aktivitas Real Langsung (Semester 2)
+                                </label>
+                                <span className="text-[10px] text-indigo-700 font-semibold">
+                                  Pilihan A
+                                </span>
+                              </div>
+                              <textarea
+                                rows={4}
+                                value={aktivitasLangsungSem2}
+                                onChange={(e) => setAktivitasLangsungSem2(e.target.value)}
+                                placeholder="Uraikan aktivitas intervensi langsung Semester 2 (atau klik Tarik Semester 1)..."
+                                className="w-full px-3.5 py-2.5 text-xs text-slate-900 bg-white border border-indigo-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-600 leading-relaxed"
+                              />
+                            </div>
+
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="text-xs font-semibold text-slate-800">
+                                  2. Aktivitas Real Tidak Langsung (Semester 2)
+                                </label>
+                                <span className="text-[10px] text-indigo-700 font-semibold">
+                                  Pilihan B
+                                </span>
+                              </div>
+                              <textarea
+                                rows={4}
+                                value={aktivitasTidakLangsungSem2}
+                                onChange={(e) => setAktivitasTidakLangsungSem2(e.target.value)}
+                                placeholder="Uraikan aktivitas tidak langsung Semester 2 (atau klik Tarik Semester 1)..."
+                                className="w-full px-3.5 py-2.5 text-xs text-slate-900 bg-white border border-indigo-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-600 leading-relaxed"
+                              />
+                            </div>
+
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="text-xs font-semibold text-slate-800">
+                                  3. Aktivitas Real Penunjang (Semester 2)
+                                </label>
+                                <span className="text-[10px] text-indigo-700 font-semibold">
+                                  Pilihan C
+                                </span>
+                              </div>
+                              <textarea
+                                rows={4}
+                                value={aktivitasPenunjangSem2}
+                                onChange={(e) => setAktivitasPenunjangSem2(e.target.value)}
+                                placeholder="Uraikan aktivitas penunjang Semester 2 (atau klik Tarik Semester 1)..."
+                                className="w-full px-3.5 py-2.5 text-xs text-slate-900 bg-white border border-indigo-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-600 leading-relaxed"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {isSem1BudgetLocked && (
+                      <div className="p-3.5 rounded-2xl bg-emerald-50/90 border border-emerald-200 text-xs text-emerald-900 flex items-start gap-2.5">
+                        <Lock className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                        <div className="space-y-0.5">
+                          <p className="font-bold">
+                            Alokasi Anggaran & Sumber Pendanaan Semester 1 Terkunci (Telah Terverifikasi Admin)
+                          </p>
+                          <p className="text-emerald-800 leading-relaxed">
+                            Karena ini adalah pengisian <strong>Semester 2</strong> dan data Semester 1 telah diverifikasi oleh Admin, maka <strong>Alokasi Anggaran</strong> serta <strong>Sumber Pendanaan / Pembiayaan</strong> awal dari Semester 1 terkunci otomatis. Jika terdapat perubahan anggaran pada Semester 2, klik tombol <strong>&ldquo;Alokasi Anggaran Perubahan&rdquo;</strong> di bawah.
+                          </p>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 pt-3 border-t border-slate-100">
                       <div className="lg:col-span-5">
-                        <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                          Alokasi Anggaran (Rp) <span className="text-rose-600">*</span>
-                        </label>
+                        <div className="flex flex-wrap items-center justify-between gap-1.5 mb-1.5">
+                          <label className="block text-xs font-semibold text-slate-700">
+                            Alokasi Anggaran (Rp) <span className="text-rose-600">*</span>
+                          </label>
+                          {isSem1BudgetLocked && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                              <Lock className="w-3 h-3" /> Terkunci (Sem 1 Terverifikasi)
+                            </span>
+                          )}
+                        </div>
                         <div className="relative">
                           <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
                             Rp
@@ -1459,12 +2373,17 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                           <input
                             type="text"
                             inputMode="numeric"
+                            disabled={isSem1BudgetLocked}
                             value={alokasiAnggaran > 0 ? formatNumber(alokasiAnggaran) : ''}
                             onChange={(e) =>
                               setAlokasiAnggaran(parseNumericInput(e.target.value))
                             }
                             placeholder="0"
-                            className="w-full pl-10 pr-4 py-2.5 text-sm font-mono-tabular font-bold text-slate-900 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                            className={`w-full pl-10 pr-4 py-2.5 text-sm font-mono-tabular font-bold rounded-xl border ${
+                              isSem1BudgetLocked
+                                ? 'bg-slate-100 text-slate-600 border-slate-200 cursor-not-allowed'
+                                : 'bg-white text-slate-900 border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#2563EB]'
+                            }`}
                           />
                         </div>
                         <p className="text-[11px] text-slate-400 mt-1.5">
@@ -1477,90 +2396,273 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                           <label className="block text-xs font-semibold text-slate-700">
                             Sumber Pendanaan / Pembiayaan <span className="text-rose-600">*</span>
                             <span className="ml-1.5 text-[11px] font-normal text-slate-500">
-                              (Bisa pilih / isi lebih dari 1)
+                              {selectedSemester === 2 || isSem1BudgetLocked
+                                ? '(Hanya menampilkan sumber pendanaan Semester 1 yang dipilih)'
+                                : '(Bisa pilih / isi lebih dari 1)'}
                             </span>
                           </label>
-                          <span className="text-[11px] font-semibold text-[#2563EB] bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200/70">
-                            {selectedSumberList.length} Sumber Dipilih
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            {(selectedSemester === 2 || isSem1BudgetLocked) && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                                <Lock className="w-3 h-3" /> Terkunci
+                              </span>
+                            )}
+                            <span className="text-[11px] font-semibold text-[#2563EB] bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200/70">
+                              {selectedSumberList.length} Sumber Dipilih
+                            </span>
+                          </div>
                         </div>
 
-                        {/* Pilihan Multi-Select Sumber Pendanaan */}
-                        <div className="flex flex-wrap gap-2">
-                          {SUMBER_PEMBIAYAAN_OPTIONS.filter(
-                            (opt) => opt !== 'Sumber Pembiayaan Lainnya'
-                          ).map((opt) => {
-                            const isChecked = selectedSumberList.includes(opt);
-                            return (
-                              <button
-                                key={opt}
-                                type="button"
-                                onClick={() => toggleSumberPendanaan(opt)}
-                                className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                                  isChecked
-                                    ? 'bg-[#2563EB] text-white border-[#2563EB] shadow-xs'
-                                    : 'bg-white text-slate-700 border-slate-200 hover:border-blue-300 hover:bg-blue-50/40'
-                                }`}
+                        {selectedSemester === 2 || isSem1BudgetLocked ? (
+                          /* Pada Semester 2 atau saat Terkunci: Hanya tampilkan sumber yang sudah dipilih saja */
+                          <div className="flex flex-wrap gap-2 pt-0.5">
+                            {selectedSumberList.map((item) => (
+                              <div
+                                key={item}
+                                className="px-3.5 py-2 rounded-xl bg-slate-100 border border-slate-300 text-slate-800 text-xs font-bold inline-flex items-center gap-2"
                               >
-                                <CheckCircle2
-                                  className={`w-3.5 h-3.5 ${
-                                    isChecked ? 'text-white' : 'text-slate-300'
-                                  }`}
-                                />
-                                <span>{opt}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                <span>{item}</span>
+                                <Lock className="w-3 h-3 text-slate-400 shrink-0" />
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <>
+                            {/* Pilihan Multi-Select Sumber Pendanaan (Mode Semester 1 & Belum Terkunci) */}
+                            <div className="flex flex-wrap gap-2">
+                              {SUMBER_PEMBIAYAAN_OPTIONS.filter(
+                                (opt) => opt !== 'Sumber Pembiayaan Lainnya'
+                              ).map((opt) => {
+                                const isChecked = selectedSumberList.includes(opt);
+                                return (
+                                  <button
+                                    key={opt}
+                                    type="button"
+                                    onClick={() => toggleSumberPendanaan(opt)}
+                                    className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                                      isChecked
+                                        ? 'bg-[#2563EB] text-white border-[#2563EB] shadow-xs'
+                                        : 'bg-white text-slate-700 border-slate-200 hover:border-blue-300 hover:bg-blue-50/40'
+                                    }`}
+                                  >
+                                    <CheckCircle2
+                                      className={`w-3.5 h-3.5 ${
+                                        isChecked ? 'text-white' : 'text-slate-300'
+                                      }`}
+                                    />
+                                    <span>{opt}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
 
-                        {/* Tambah Sumber Pendanaan Lainnya (Kustom) */}
-                        <div className="flex items-center gap-2 pt-0.5">
-                          <input
-                            type="text"
-                            value={customSumberInput}
-                            onChange={(e) => setCustomSumberInput(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                handleAddCustomSumber();
-                              }
-                            }}
-                            placeholder="Tambah sumber pendanaan lainnya (misal: BAZNAS, DAK, DBHCHT)..."
-                            className="flex-1 px-3.5 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
-                          />
+                            {/* Tambah Sumber Pendanaan Lainnya (Kustom) */}
+                            <div className="flex items-center gap-2 pt-0.5">
+                              <input
+                                type="text"
+                                value={customSumberInput}
+                                onChange={(e) => setCustomSumberInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleAddCustomSumber();
+                                  }
+                                }}
+                                placeholder="Tambah sumber pendanaan lainnya (misal: BAZNAS, DAK, DBHCHT)..."
+                                className="flex-1 px-3.5 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                              />
+                              <button
+                                type="button"
+                                onClick={handleAddCustomSumber}
+                                className="px-3.5 py-2 rounded-xl bg-blue-50 text-[#2563EB] hover:bg-blue-100 border border-blue-200 text-xs font-semibold transition-colors cursor-pointer shrink-0"
+                              >
+                                + Tambah Sumber
+                              </button>
+                            </div>
+
+                            {/* Ringkasan Sumber Pendanaan yang Aktif */}
+                            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                              <span className="text-[11px] text-slate-400 mr-1">Terpilih:</span>
+                              {selectedSumberList.map((item) => (
+                                <span
+                                  key={item}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50/90 border border-blue-200 text-[11px] font-semibold text-[#1D4ED8]"
+                                >
+                                  <span>{item}</span>
+                                  {selectedSumberList.length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleSumberPendanaan(item)}
+                                      className="text-blue-400 hover:text-rose-600 cursor-pointer"
+                                      title="Hapus sumber pendanaan ini"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                </span>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* TOMBOL & PANEL ALOKASI ANGGARAN PERUBAHAN (HANYA MUNCUL PADA SEMESTER 2) */}
+                    {selectedSemester === 2 && (
+                      <div className="pt-4 border-t border-slate-200/80 space-y-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div className="space-y-0.5">
+                            <p className="text-xs font-bold text-slate-800">
+                              Alokasi Anggaran Perubahan & Sumber Pendanaan Perubahan
+                            </p>
+                            <p className="text-[11px] text-slate-500">
+                              Klik tombol <strong>Alokasi Anggaran Perubahan</strong> apabila terdapat perubahan pagu alokasi anggaran atau sumber pendanaan pada Semester 2.
+                            </p>
+                          </div>
                           <button
                             type="button"
-                            onClick={handleAddCustomSumber}
-                            className="px-3.5 py-2 rounded-xl bg-blue-50 text-[#2563EB] hover:bg-blue-100 border border-blue-200 text-xs font-semibold transition-colors cursor-pointer shrink-0"
+                            onClick={() => setShowAnggaranPerubahan((prev) => !prev)}
+                            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs ${
+                              showAnggaranPerubahan
+                                ? 'bg-indigo-600 text-white border border-indigo-600 hover:bg-indigo-700'
+                                : 'bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100'
+                            }`}
                           >
-                            + Tambah Sumber
+                            <Wallet className="w-4 h-4" />
+                            <span>
+                              {showAnggaranPerubahan
+                                ? 'Tutup Alokasi Anggaran Perubahan'
+                                : '+ Alokasi Anggaran Perubahan'}
+                            </span>
                           </button>
                         </div>
 
-                        {/* Ringkasan Sumber Pendanaan yang Aktif */}
-                        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                          <span className="text-[11px] text-slate-400 mr-1">Terpilih:</span>
-                          {selectedSumberList.map((item) => (
-                            <span
-                              key={item}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50/90 border border-blue-200 text-[11px] font-semibold text-[#1D4ED8]"
-                            >
-                              <span>{item}</span>
-                              {selectedSumberList.length > 1 && (
+                        {showAnggaranPerubahan && (
+                          <div className="p-4 sm:p-5 rounded-2xl bg-indigo-50/50 border-2 border-indigo-200/90 grid grid-cols-1 lg:grid-cols-12 gap-5">
+                            <div className="lg:col-span-5">
+                              <label className="block text-xs font-bold text-indigo-950 mb-1.5">
+                                Alokasi Anggaran Perubahan (Rp) <span className="text-rose-600">*</span>
+                              </label>
+                              <div className="relative">
+                                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-indigo-400">
+                                  Rp
+                                </span>
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  value={
+                                    alokasiAnggaranPerubahan > 0
+                                      ? formatNumber(alokasiAnggaranPerubahan)
+                                      : ''
+                                  }
+                                  onChange={(e) =>
+                                    setAlokasiAnggaranPerubahan(parseNumericInput(e.target.value))
+                                  }
+                                  placeholder="0"
+                                  className="w-full pl-10 pr-4 py-2.5 text-sm font-mono-tabular font-bold text-slate-900 bg-white border border-indigo-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                                />
+                              </div>
+                              <p className="text-[11px] text-indigo-900/70 mt-1.5">
+                                Tersimpan numerik:{' '}
+                                <strong className="text-indigo-950">
+                                  {formatRupiah(alokasiAnggaranPerubahan)}
+                                </strong>
+                              </p>
+                            </div>
+
+                            <div className="lg:col-span-7 space-y-2.5">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <label className="block text-xs font-bold text-indigo-950">
+                                  Sumber Pendanaan / Pembiayaan (Perubahan){' '}
+                                  <span className="text-rose-600">*</span>
+                                  <span className="ml-1.5 text-[11px] font-normal text-indigo-700">
+                                    (Bisa pilih / isi lebih dari 1)
+                                  </span>
+                                </label>
+                                <span className="text-[11px] font-semibold text-indigo-700 bg-white px-2 py-0.5 rounded-md border border-indigo-200">
+                                  {selectedSumberPerubahanList.length} Sumber Dipilih
+                                </span>
+                              </div>
+
+                              <div className="flex flex-wrap gap-2">
+                                {SUMBER_PEMBIAYAAN_OPTIONS.filter(
+                                  (opt) => opt !== 'Sumber Pembiayaan Lainnya'
+                                ).map((opt) => {
+                                  const isChecked = selectedSumberPerubahanList.includes(opt);
+                                  return (
+                                    <button
+                                      key={opt}
+                                      type="button"
+                                      onClick={() => toggleSumberPendanaanPerubahan(opt)}
+                                      className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                                        isChecked
+                                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                                          : 'bg-white text-slate-700 border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50/40'
+                                      }`}
+                                    >
+                                      <CheckCircle2
+                                        className={`w-3.5 h-3.5 ${
+                                          isChecked ? 'text-white' : 'text-slate-300'
+                                        }`}
+                                      />
+                                      <span>{opt}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+
+                              <div className="flex items-center gap-2 pt-0.5">
+                                <input
+                                  type="text"
+                                  value={customSumberPerubahanInput}
+                                  onChange={(e) => setCustomSumberPerubahanInput(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      handleAddCustomSumberPerubahan();
+                                    }
+                                  }}
+                                  placeholder="Tambah sumber pendanaan perubahan lainnya (misal: APBDP, DID, BAZNAS)..."
+                                  className="flex-1 px-3.5 py-2 text-xs bg-white border border-indigo-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                                />
                                 <button
                                   type="button"
-                                  onClick={() => toggleSumberPendanaan(item)}
-                                  className="text-blue-400 hover:text-rose-600 cursor-pointer"
-                                  title="Hapus sumber pendanaan ini"
+                                  onClick={handleAddCustomSumberPerubahan}
+                                  className="px-3.5 py-2 rounded-xl bg-white text-indigo-700 hover:bg-indigo-100 border border-indigo-300 text-xs font-semibold transition-colors cursor-pointer shrink-0"
                                 >
-                                  <X className="w-3 h-3" />
+                                  + Tambah Sumber
                                 </button>
-                              )}
-                            </span>
-                          ))}
-                        </div>
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                                <span className="text-[11px] text-indigo-900/70 mr-1">
+                                  Terpilih (Perubahan):
+                                </span>
+                                {selectedSumberPerubahanList.map((item) => (
+                                  <span
+                                    key={item}
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-indigo-200 text-[11px] font-semibold text-indigo-800"
+                                  >
+                                    <span>{item}</span>
+                                    {selectedSumberPerubahanList.length > 1 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleSumberPendanaanPerubahan(item)}
+                                        className="text-indigo-400 hover:text-rose-600 cursor-pointer"
+                                        title="Hapus sumber pendanaan perubahan ini"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    )}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
+                    )}
                   </motion.div>
                 )}
 
@@ -1574,216 +2676,533 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                     transition={{ duration: 0.18 }}
                     className="space-y-5"
                   >
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                          Sifat Bantuan <span className="text-rose-600">*</span>
-                        </label>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                          {(['Berkelanjutan', 'Tidak Berkelanjutan'] as const).map((opt) => (
-                            <button
-                              key={opt}
-                              type="button"
-                              onClick={() => setSifatBantuan(opt)}
-                              className={`px-4 py-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between transition-all cursor-pointer ${
-                                sifatBantuan === opt
-                                  ? 'bg-[#2563EB] text-white border-[#2563EB] shadow-xs'
-                                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                              }`}
-                            >
-                              <span>{opt}</span>
-                              {sifatBantuan === opt && <CheckCircle2 className="w-4 h-4" />}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Lokasi Kegiatan */}
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                          Lokasi Kegiatan <span className="text-rose-600">*</span>
-                        </label>
-                        <div className="relative">
-                          <MapPin className="w-4 h-4 text-[#2563EB] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                          <input
-                            type="text"
-                            value={lokasiKegiatan}
-                            onChange={(e) => setLokasiKegiatan(e.target.value)}
-                            placeholder="Contoh: Kabupaten Blora / Kec. Blora, Desa Tempelan..."
-                            className="w-full pl-9 pr-3.5 py-2.5 text-xs font-medium text-slate-900 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
-                          />
-                        </div>
-                        <div className="flex flex-wrap gap-1 mt-1.5">
-                          {[
-                            'Kabupaten Blora',
-                            '16 Kecamatan se-Kabupaten Blora',
-                            ...KECAMATAN_BLORA.slice(0, 4).map((k) => `Kec. ${k}`),
-                          ].map((presetLok) => (
-                            <button
-                              key={presetLok}
-                              type="button"
-                              onClick={() => setLokasiKegiatan(presetLok)}
-                              className={`text-[10px] px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
-                                lokasiKegiatan === presetLok
-                                  ? 'bg-[#2563EB] text-white font-semibold'
-                                  : 'bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-[#2563EB]'
-                              }`}
-                            >
-                              + {presetLok}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Panel Target & Rincian Sasaran Penerima Manfaat (Kolom Ketikan Deskripsi Saja) */}
-                    <div className="p-4 rounded-2xl bg-[#F8FAFF] border border-blue-100 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs font-bold text-slate-800">
-                          Target & Rincian Sasaran Penerima Manfaat <span className="text-rose-600">*</span>
-                        </label>
-                        <span className="text-[11px] font-medium text-slate-500">
-                          Kolom Deskripsi Sasaran
-                        </span>
-                      </div>
-
-                      <textarea
-                        rows={3}
-                        value={deskripsiSasaran}
-                        onChange={(e) => setDeskripsiSasaran(e.target.value)}
-                        placeholder="Ketik deskripsi target dan rincian sasaran penerima manfaat (contoh: 250 KPM keluarga miskin ekstrem Desil 1–2 P3KE / DTKS di wilayah lokus kemiskinan)..."
-                        className="w-full px-3.5 py-2.5 text-xs text-slate-900 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB] leading-relaxed"
-                      />
-                      <p className="text-[11px] text-slate-500">
-                        Tuliskan secara deskriptif jumlah/target serta kriteria kelompok sasaran penerima manfaat kegiatan.
-                      </p>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 mb-1">
-                          Besaran Manfaat <span className="text-rose-600">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={besaranManfaat}
-                          onChange={(e) => setBesaranManfaat(e.target.value)}
-                          placeholder="Rp300.000/orang atau 1 paket"
-                          className="w-full px-3.5 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
-                        />
-                        <div className="flex flex-wrap gap-1 mt-1.5">
-                          {BESARAN_MANFAAT_PRESETS.slice(0, 3).map((p) => (
-                            <button
-                              key={p}
-                              type="button"
-                              onClick={() => setBesaranManfaat(p)}
-                              className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-[#2563EB] cursor-pointer"
-                            >
-                              + {p}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 mb-1">
-                          Jenis Bantuan <span className="text-rose-600">*</span>
-                        </label>
-                        <select
-                          value={jenisBantuan}
-                          onChange={(e) => setJenisBantuan(e.target.value)}
-                          className="w-full px-3.5 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
-                        >
-                          {JENIS_BANTUAN_OPTIONS.map((j) => (
-                            <option key={j} value={j}>
-                              {j}
-                            </option>
-                          ))}
-                        </select>
-                        {jenisBantuan === 'Bantuan lainnya' && (
-                          <input
-                            type="text"
-                            value={customJenisBantuan}
-                            onChange={(e) => setCustomJenisBantuan(e.target.value)}
-                            placeholder="Ketik jenis bantuan..."
-                            className="w-full mt-1.5 px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
-                          />
-                        )}
-                      </div>
-
-                      <div className="space-y-2.5">
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-700 mb-1">
-                            Durasi Pemberian Bantuan <span className="text-rose-600">*</span>
-                          </label>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="number"
-                              min={1}
-                              step={1}
-                              value={durasiAngka}
-                              onChange={(e) =>
-                                setDurasiAngka(
-                                  e.target.value === ''
-                                    ? 1
-                                    : Math.max(1, parseInt(e.target.value, 10) || 1)
-                                )
-                              }
-                              placeholder="1"
-                              className="w-20 px-3 py-2 text-xs font-mono-tabular font-bold text-slate-900 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
-                            />
-                            <select
-                              value={durasiSatuan}
-                              onChange={(e) => setDurasiSatuan(e.target.value)}
-                              className="flex-1 px-3 py-2 text-xs font-semibold text-slate-900 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB] cursor-pointer"
-                            >
-                              {DURASI_SATUAN_LIST.map((sat) => (
-                                <option key={sat} value={sat}>
-                                  {sat}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="flex flex-wrap gap-1 mt-1.5">
-                            {DURASI_PRESET_ITEMS.map((item) => {
-                              const isSelected =
-                                durasiAngka === item.angka && durasiSatuan === item.satuan;
-                              return (
+                    {selectedSemester === 1 ? (
+                      <>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                              Sifat Bantuan <span className="text-rose-600">*</span>
+                            </label>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                              {(['Berkelanjutan', 'Tidak Berkelanjutan'] as const).map((opt) => (
                                 <button
-                                  key={item.label}
+                                  key={opt}
                                   type="button"
-                                  onClick={() => {
-                                    setDurasiAngka(item.angka);
-                                    setDurasiSatuan(item.satuan);
-                                  }}
-                                  className={`text-[10px] px-2.5 py-0.5 rounded-md transition-colors cursor-pointer ${
-                                    isSelected
+                                  onClick={() => setSifatBantuan(opt)}
+                                  className={`px-4 py-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between transition-all cursor-pointer ${
+                                    sifatBantuan === opt
+                                      ? 'bg-[#2563EB] text-white border-[#2563EB] shadow-xs'
+                                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                                  }`}
+                                >
+                                  <span>{opt}</span>
+                                  {sifatBantuan === opt && <CheckCircle2 className="w-4 h-4" />}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Lokasi Kegiatan */}
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                              Lokasi Kegiatan <span className="text-rose-600">*</span>
+                            </label>
+                            <div className="relative">
+                              <MapPin className="w-4 h-4 text-[#2563EB] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                              <input
+                                type="text"
+                                value={lokasiKegiatan}
+                                onChange={(e) => setLokasiKegiatan(e.target.value)}
+                                placeholder="Contoh: Kabupaten Blora / Kec. Blora, Desa Tempelan..."
+                                className="w-full pl-9 pr-3.5 py-2.5 text-xs font-medium text-slate-900 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                              />
+                            </div>
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {[
+                                'Kabupaten Blora',
+                                '16 Kecamatan se-Kabupaten Blora',
+                                ...KECAMATAN_BLORA.slice(0, 4).map((k) => `Kec. ${k}`),
+                              ].map((presetLok) => (
+                                <button
+                                  key={presetLok}
+                                  type="button"
+                                  onClick={() => setLokasiKegiatan(presetLok)}
+                                  className={`text-[10px] px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
+                                    lokasiKegiatan === presetLok
                                       ? 'bg-[#2563EB] text-white font-semibold'
                                       : 'bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-[#2563EB]'
                                   }`}
                                 >
-                                  {item.label}
+                                  + {presetLok}
                                 </button>
-                              );
-                            })}
+                              ))}
+                            </div>
                           </div>
                         </div>
 
-                        {/* Kolom Isian Tambahan Keterangan Durasi Bantuan */}
-                        <div>
-                          <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                            Keterangan Durasi Bantuan
-                          </label>
-                          <input
-                            type="text"
-                            value={keteranganDurasiBantuan}
-                            onChange={(e) => setKeteranganDurasiBantuan(e.target.value)}
-                            placeholder="Ketik keterangan tambahan durasi bantuan..."
-                            className="w-full px-3.5 py-2 text-xs text-slate-900 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                        {/* Panel Target & Rincian Sasaran Penerima Manfaat (Kolom Ketikan Deskripsi Saja) */}
+                        <div className="p-4 rounded-2xl bg-[#F8FAFF] border border-blue-100 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label className="text-xs font-bold text-slate-800">
+                              Target & Rincian Sasaran Penerima Manfaat <span className="text-rose-600">*</span>
+                            </label>
+                            <span className="text-[11px] font-medium text-slate-500">
+                              Kolom Deskripsi Sasaran
+                            </span>
+                          </div>
+
+                          <textarea
+                            rows={3}
+                            value={deskripsiSasaran}
+                            onChange={(e) => setDeskripsiSasaran(e.target.value)}
+                            placeholder="Ketik deskripsi target dan rincian sasaran penerima manfaat (contoh: 250 KPM keluarga miskin ekstrem Desil 1–2 P3KE / DTKS di wilayah lokus kemiskinan)..."
+                            className="w-full px-3.5 py-2.5 text-xs text-slate-900 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB] leading-relaxed"
                           />
+                          <p className="text-[11px] text-slate-500">
+                            Tuliskan secara deskriptif jumlah/target serta kriteria kelompok sasaran penerima manfaat kegiatan.
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">
+                              Besaran Manfaat <span className="text-rose-600">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={besaranManfaat}
+                              onChange={(e) => setBesaranManfaat(e.target.value)}
+                              placeholder="Rp300.000/orang atau 1 paket"
+                              className="w-full px-3.5 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                            />
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {BESARAN_MANFAAT_PRESETS.slice(0, 3).map((p) => (
+                                <button
+                                  key={p}
+                                  type="button"
+                                  onClick={() => setBesaranManfaat(p)}
+                                  className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-[#2563EB] cursor-pointer"
+                                >
+                                  + {p}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">
+                              Jenis Bantuan <span className="text-rose-600">*</span>
+                            </label>
+                            <select
+                              value={jenisBantuan}
+                              onChange={(e) => setJenisBantuan(e.target.value)}
+                              className="w-full px-3.5 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                            >
+                              {JENIS_BANTUAN_OPTIONS.map((j) => (
+                                <option key={j} value={j}>
+                                  {j}
+                                </option>
+                              ))}
+                            </select>
+                            {jenisBantuan === 'Bantuan lainnya' && (
+                              <input
+                                type="text"
+                                value={customJenisBantuan}
+                                onChange={(e) => setCustomJenisBantuan(e.target.value)}
+                                placeholder="Ketik jenis bantuan..."
+                                className="w-full mt-1.5 px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                              />
+                            )}
+                          </div>
+
+                          <div className="space-y-2.5">
+                            <div>
+                              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                                Durasi Pemberian Bantuan <span className="text-rose-600">*</span>
+                              </label>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  min={1}
+                                  step={1}
+                                  value={durasiAngka}
+                                  onChange={(e) =>
+                                    setDurasiAngka(
+                                      e.target.value === ''
+                                        ? 1
+                                        : Math.max(1, parseInt(e.target.value, 10) || 1)
+                                    )
+                                  }
+                                  placeholder="1"
+                                  className="w-20 px-3 py-2 text-xs font-mono-tabular font-bold text-slate-900 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                                />
+                                <select
+                                  value={durasiSatuan}
+                                  onChange={(e) => setDurasiSatuan(e.target.value)}
+                                  className="flex-1 px-3 py-2 text-xs font-semibold text-slate-900 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB] cursor-pointer"
+                                >
+                                  {DURASI_SATUAN_LIST.map((sat) => (
+                                    <option key={sat} value={sat}>
+                                      {sat}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="flex flex-wrap gap-1 mt-1.5">
+                                {DURASI_PRESET_ITEMS.map((item) => {
+                                  const isSelected =
+                                    durasiAngka === item.angka && durasiSatuan === item.satuan;
+                                  return (
+                                    <button
+                                      key={item.label}
+                                      type="button"
+                                      onClick={() => {
+                                        setDurasiAngka(item.angka);
+                                        setDurasiSatuan(item.satuan);
+                                      }}
+                                      className={`text-[10px] px-2.5 py-0.5 rounded-md transition-colors cursor-pointer ${
+                                        isSelected
+                                          ? 'bg-[#2563EB] text-white font-semibold'
+                                          : 'bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-[#2563EB]'
+                                      }`}
+                                    >
+                                      {item.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Kolom Isian Tambahan Keterangan Durasi Bantuan */}
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                                Keterangan Durasi Bantuan
+                              </label>
+                              <input
+                                type="text"
+                                value={keteranganDurasiBantuan}
+                                onChange={(e) => setKeteranganDurasiBantuan(e.target.value)}
+                                placeholder="Ketik keterangan tambahan durasi bantuan..."
+                                className="w-full px-3.5 py-2 text-xs text-slate-900 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="space-y-5">
+                        {/* REKAP HASIL INPUTAN KARAKTERISTIK & SASARAN SEMESTER 1 */}
+                        <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/90 space-y-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200/70">
+                            <div className="flex items-center gap-2">
+                              <FileText className="w-4 h-4 text-[#2563EB] shrink-0" />
+                              <span className="text-xs font-extrabold text-slate-800">
+                                Rekap Hasil Inputan Karakteristik & Sasaran Semester 1
+                              </span>
+                            </div>
+                            <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-slate-600 bg-slate-200/70 px-2.5 py-0.5 rounded-md">
+                              <Lock className="w-3 h-3 text-slate-500" />
+                              Data Semester 1
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            <div className="p-3 rounded-xl bg-white border border-slate-200/80">
+                              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                Sifat Bantuan (Sem 1)
+                              </span>
+                              <p className="text-xs font-bold text-slate-800 mt-0.5">
+                                {sifatBantuan || '-'}
+                              </p>
+                            </div>
+
+                            <div className="p-3 rounded-xl bg-white border border-slate-200/80">
+                              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                Lokasi Kegiatan (Sem 1)
+                              </span>
+                              <p className="text-xs font-bold text-slate-800 mt-0.5">
+                                {lokasiKegiatan || '-'}
+                              </p>
+                            </div>
+
+                            <div className="p-3 rounded-xl bg-white border border-slate-200/80">
+                              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                Besaran Manfaat (Sem 1)
+                              </span>
+                              <p className="text-xs font-bold text-slate-800 mt-0.5">
+                                {besaranManfaat || '-'}
+                              </p>
+                            </div>
+
+                            <div className="p-3 rounded-xl bg-white border border-slate-200/80">
+                              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                Jenis Bantuan (Sem 1)
+                              </span>
+                              <p className="text-xs font-bold text-slate-800 mt-0.5">
+                                {finalJenisBantuan || '-'}
+                              </p>
+                            </div>
+
+                            <div className="p-3 rounded-xl bg-white border border-slate-200/80 sm:col-span-2">
+                              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                Durasi Pemberian Bantuan (Sem 1)
+                              </span>
+                              <p className="text-xs font-bold text-slate-800 mt-0.5">
+                                {durasiBantuan || '-'}
+                                {keteranganDurasiBantuan.trim()
+                                  ? ` — ${keteranganDurasiBantuan.trim()}`
+                                  : ''}
+                              </p>
+                            </div>
+
+                            <div className="p-3 rounded-xl bg-white border border-slate-200/80 sm:col-span-2 lg:col-span-3">
+                              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                Target & Rincian Sasaran Penerima Manfaat (Sem 1)
+                              </span>
+                              <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line mt-1">
+                                {deskripsiSasaran.trim() || '-'}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* ISIAN KARAKTERISTIK & SASARAN SEMESTER 2 + TOMBOL TARIK SEMESTER 1 */}
+                        <div className="p-4 sm:p-5 rounded-2xl bg-indigo-50/40 border-2 border-indigo-200/80 space-y-4">
+                          <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-indigo-200/60">
+                            <div>
+                              <h4 className="text-xs font-extrabold text-indigo-950">
+                                Isian Karakteristik & Sasaran Semester 2
+                              </h4>
+                              <p className="text-[11px] text-indigo-900/75">
+                                Silakan lengkapi karakteristik & sasaran penerima manfaat Semester 2 atau klik <strong>Tarik Semester 1</strong> untuk menyalin dari Semester 1.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={handlePullSem1KarakteristikToSem2}
+                              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer shrink-0"
+                            >
+                              <Sparkles className="w-3.5 h-3.5" />
+                              <span>Tarik Semester 1</span>
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-xs font-semibold text-slate-800 mb-1.5">
+                                Sifat Bantuan (Semester 2) <span className="text-rose-600">*</span>
+                              </label>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                {(['Berkelanjutan', 'Tidak Berkelanjutan'] as const).map((opt) => (
+                                  <button
+                                    key={opt}
+                                    type="button"
+                                    onClick={() => setSifatBantuanSem2(opt)}
+                                    className={`px-4 py-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between transition-all cursor-pointer ${
+                                      sifatBantuanSem2 === opt
+                                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                                        : 'bg-white text-slate-700 border-indigo-200 hover:bg-indigo-50'
+                                    }`}
+                                  >
+                                    <span>{opt}</span>
+                                    {sifatBantuanSem2 === opt && <CheckCircle2 className="w-4 h-4" />}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Lokasi Kegiatan Semester 2 */}
+                            <div>
+                              <label className="block text-xs font-semibold text-slate-800 mb-1.5">
+                                Lokasi Kegiatan (Semester 2) <span className="text-rose-600">*</span>
+                              </label>
+                              <div className="relative">
+                                <MapPin className="w-4 h-4 text-indigo-600 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                <input
+                                  type="text"
+                                  value={lokasiKegiatanSem2}
+                                  onChange={(e) => setLokasiKegiatanSem2(e.target.value)}
+                                  placeholder="Contoh: Kabupaten Blora / Kec. Blora, Desa Tempelan..."
+                                  className="w-full pl-9 pr-3.5 py-2.5 text-xs font-medium text-slate-900 bg-white border border-indigo-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                                />
+                              </div>
+                              <div className="flex flex-wrap gap-1 mt-1.5">
+                                {[
+                                  'Kabupaten Blora',
+                                  '16 Kecamatan se-Kabupaten Blora',
+                                  ...KECAMATAN_BLORA.slice(0, 4).map((k) => `Kec. ${k}`),
+                                ].map((presetLok) => (
+                                  <button
+                                    key={presetLok}
+                                    type="button"
+                                    onClick={() => setLokasiKegiatanSem2(presetLok)}
+                                    className={`text-[10px] px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
+                                      lokasiKegiatanSem2 === presetLok
+                                        ? 'bg-indigo-600 text-white font-semibold'
+                                        : 'bg-white text-slate-600 border border-indigo-100 hover:bg-indigo-50 hover:text-indigo-700'
+                                    }`}
+                                  >
+                                    + {presetLok}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Target & Rincian Sasaran Penerima Manfaat Semester 2 */}
+                          <div className="p-4 rounded-2xl bg-white border border-indigo-200/80 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <label className="text-xs font-bold text-slate-800">
+                                Target & Rincian Sasaran Penerima Manfaat (Semester 2){' '}
+                                <span className="text-rose-600">*</span>
+                              </label>
+                              <span className="text-[11px] font-medium text-indigo-700">
+                                Kolom Deskripsi Sasaran Semester 2
+                              </span>
+                            </div>
+
+                            <textarea
+                              rows={3}
+                              value={deskripsiSasaranSem2}
+                              onChange={(e) => setDeskripsiSasaranSem2(e.target.value)}
+                              placeholder="Ketik deskripsi target dan rincian sasaran penerima manfaat Semester 2 (atau klik Tarik Semester 1)..."
+                              className="w-full px-3.5 py-2.5 text-xs text-slate-900 bg-white border border-indigo-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-600 leading-relaxed"
+                            />
+                            <p className="text-[11px] text-slate-500">
+                              Tuliskan secara deskriptif jumlah/target serta kriteria kelompok sasaran penerima manfaat kegiatan Semester 2.
+                            </p>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                            <div>
+                              <label className="block text-xs font-semibold text-slate-800 mb-1">
+                                Besaran Manfaat (Semester 2) <span className="text-rose-600">*</span>
+                              </label>
+                              <input
+                                type="text"
+                                value={besaranManfaatSem2}
+                                onChange={(e) => setBesaranManfaatSem2(e.target.value)}
+                                placeholder="Rp300.000/orang atau 1 paket"
+                                className="w-full px-3.5 py-2 text-xs bg-white border border-indigo-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                              />
+                              <div className="flex flex-wrap gap-1 mt-1.5">
+                                {BESARAN_MANFAAT_PRESETS.slice(0, 3).map((p) => (
+                                  <button
+                                    key={p}
+                                    type="button"
+                                    onClick={() => setBesaranManfaatSem2(p)}
+                                    className="text-[10px] px-2 py-0.5 rounded-md bg-white border border-indigo-100 text-slate-600 hover:bg-indigo-50 hover:text-indigo-700 cursor-pointer"
+                                  >
+                                    + {p}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="block text-xs font-semibold text-slate-800 mb-1">
+                                Jenis Bantuan (Semester 2) <span className="text-rose-600">*</span>
+                              </label>
+                              <select
+                                value={jenisBantuanSem2}
+                                onChange={(e) => setJenisBantuanSem2(e.target.value)}
+                                className="w-full px-3.5 py-2 text-xs bg-white border border-indigo-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                              >
+                                {JENIS_BANTUAN_OPTIONS.map((j) => (
+                                  <option key={j} value={j}>
+                                    {j}
+                                  </option>
+                                ))}
+                              </select>
+                              {jenisBantuanSem2 === 'Bantuan lainnya' && (
+                                <input
+                                  type="text"
+                                  value={customJenisBantuanSem2}
+                                  onChange={(e) => setCustomJenisBantuanSem2(e.target.value)}
+                                  placeholder="Ketik jenis bantuan Semester 2..."
+                                  className="w-full mt-1.5 px-3 py-1.5 text-xs bg-white border border-indigo-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                                />
+                              )}
+                            </div>
+
+                            <div className="space-y-2.5">
+                              <div>
+                                <label className="block text-xs font-semibold text-slate-800 mb-1">
+                                  Durasi Pemberian Bantuan (Semester 2){' '}
+                                  <span className="text-rose-600">*</span>
+                                </label>
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    step={1}
+                                    value={durasiAngkaSem2}
+                                    onChange={(e) =>
+                                      setDurasiAngkaSem2(
+                                        e.target.value === ''
+                                          ? 1
+                                          : Math.max(1, parseInt(e.target.value, 10) || 1)
+                                      )
+                                    }
+                                    placeholder="1"
+                                    className="w-20 px-3 py-2 text-xs font-mono-tabular font-bold text-slate-900 bg-white border border-indigo-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                                  />
+                                  <select
+                                    value={durasiSatuanSem2}
+                                    onChange={(e) => setDurasiSatuanSem2(e.target.value)}
+                                    className="flex-1 px-3 py-2 text-xs font-semibold text-slate-900 bg-white border border-indigo-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-600 cursor-pointer"
+                                  >
+                                    {DURASI_SATUAN_LIST.map((sat) => (
+                                      <option key={sat} value={sat}>
+                                        {sat}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div className="flex flex-wrap gap-1 mt-1.5">
+                                  {DURASI_PRESET_ITEMS.map((item) => {
+                                    const isSelected =
+                                      durasiAngkaSem2 === item.angka &&
+                                      durasiSatuanSem2 === item.satuan;
+                                    return (
+                                      <button
+                                        key={item.label}
+                                        type="button"
+                                        onClick={() => {
+                                          setDurasiAngkaSem2(item.angka);
+                                          setDurasiSatuanSem2(item.satuan);
+                                        }}
+                                        className={`text-[10px] px-2.5 py-0.5 rounded-md transition-colors cursor-pointer ${
+                                          isSelected
+                                            ? 'bg-indigo-600 text-white font-semibold'
+                                            : 'bg-white border border-indigo-100 text-slate-600 hover:bg-indigo-50 hover:text-indigo-700'
+                                        }`}
+                                      >
+                                        {item.label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+
+                              {/* Kolom Isian Tambahan Keterangan Durasi Bantuan Semester 2 */}
+                              <div>
+                                <label className="block text-[11px] font-semibold text-slate-800 mb-1">
+                                  Keterangan Durasi Bantuan (Semester 2)
+                                </label>
+                                <input
+                                  type="text"
+                                  value={keteranganDurasiBantuanSem2}
+                                  onChange={(e) => setKeteranganDurasiBantuanSem2(e.target.value)}
+                                  placeholder="Ketik keterangan tambahan durasi bantuan Semester 2..."
+                                  className="w-full px-3.5 py-2 text-xs text-slate-900 bg-white border border-indigo-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                                />
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    )}
                   </motion.div>
                 )}
 
@@ -1822,23 +3241,32 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                     </div>
 
                     {/* Ringkasan Pagu Alokasi Anggaran Sub Kegiatan */}
-                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex flex-wrap items-center justify-between gap-3">
+                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex flex-wrap items-center justify-between gap-4">
                       <div>
                         <span className="block text-xs font-medium text-slate-500">
-                          Pagu Alokasi Anggaran Sub Kegiatan
+                          Pagu Alokasi Anggaran Murni (Semester 1)
                         </span>
                         <p className="text-lg font-mono-tabular font-bold text-slate-900 mt-0.5">
                           {formatRupiah(alokasiAnggaran)}
                         </p>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-[11px] font-semibold text-slate-500 block">
-                          Sumber Pendanaan
-                        </span>
-                        <span className="text-xs font-bold text-[#1D4ED8]">
-                          {finalSumberPembiayaan || '-'}
+                        <span className="text-[11px] font-semibold text-[#1D4ED8]">
+                          Sumber: {finalSumberPembiayaan || '-'}
                         </span>
                       </div>
+
+                      {showAnggaranPerubahan && alokasiAnggaranPerubahan > 0 && (
+                        <div className="pl-4 border-l border-indigo-200">
+                          <span className="block text-xs font-semibold text-indigo-700">
+                            Alokasi Anggaran Perubahan (Semester 2)
+                          </span>
+                          <p className="text-lg font-mono-tabular font-bold text-indigo-950 mt-0.5">
+                            {formatRupiah(alokasiAnggaranPerubahan)}
+                          </p>
+                          <span className="text-[11px] font-semibold text-indigo-700">
+                            Sumber Perubahan: {finalSumberPembiayaanPerubahan || '-'}
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     <div
@@ -1863,14 +3291,14 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                             </p>
                           </div>
                           <StatusIndicator
-                            status={initialRow?.sem1.status_verifikasi || 'Belum Diisi'}
+                            status={effectiveRow?.sem1.status_verifikasi || 'Belum Diisi'}
                           />
                         </div>
 
-                        {initialRow?.sem1.catatan_verifikator && (
+                        {effectiveRow?.sem1.catatan_verifikator && (
                           <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900">
                             <strong>Catatan Verifikator Semester 1:</strong>{' '}
-                            {initialRow.sem1.catatan_verifikator}
+                            {effectiveRow.sem1.catatan_verifikator}
                           </div>
                         )}
 
@@ -1972,14 +3400,14 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                               </p>
                             </div>
                             <StatusIndicator
-                              status={initialRow?.sem2.status_verifikasi || 'Belum Diisi'}
+                              status={effectiveRow?.sem2.status_verifikasi || 'Belum Diisi'}
                             />
                           </div>
 
-                          {initialRow?.sem2.catatan_verifikator && (
+                          {effectiveRow?.sem2.catatan_verifikator && (
                             <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900">
                               <strong>Catatan Verifikator Semester 2:</strong>{' '}
-                              {initialRow.sem2.catatan_verifikator}
+                              {effectiveRow.sem2.catatan_verifikator}
                             </div>
                           )}
 
@@ -2017,8 +3445,8 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                                 </span>
                                 <span className="font-mono-tabular font-bold text-indigo-700">
                                   Capaian S2:{' '}
-                                  {alokasiAnggaran > 0
-                                    ? `${((realisasiSem2 / alokasiAnggaran) * 100).toFixed(1)}%`
+                                  {effectiveAlokasiForSem2 > 0
+                                    ? `${((realisasiSem2 / effectiveAlokasiForSem2) * 100).toFixed(1)}%`
                                     : '0%'}
                                 </span>
                               </div>
@@ -2064,6 +3492,127 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                         </div>
                       )}
                     </div>
+
+                    {/* KOTAK SISA PAGU (DIBAWAH REALISASI SEMESTER 2) */}
+                    {selectedSemester === 2 && (() => {
+                      const isUsingPerubahan =
+                        showAnggaranPerubahan && alokasiAnggaranPerubahan > 0;
+                      const paguAcuan = isUsingPerubahan
+                        ? alokasiAnggaranPerubahan
+                        : alokasiAnggaran;
+                      const totalRealisasi = realisasiSem1 + realisasiSem2;
+                      const sisaPagu = paguAcuan - realisasiSem1 - realisasiSem2;
+                      const isNegative = sisaPagu < 0;
+
+                      return (
+                        <div
+                          className={`p-5 rounded-2xl border-2 space-y-3.5 ${
+                            isNegative
+                              ? 'bg-rose-50/70 border-rose-200'
+                              : 'bg-emerald-50/60 border-emerald-200/90'
+                          }`}
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-200/70">
+                            <div className="flex items-center gap-2">
+                              <Wallet
+                                className={`w-4 h-4 ${
+                                  isNegative ? 'text-rose-600' : 'text-emerald-600'
+                                }`}
+                              />
+                              <div>
+                                <h4 className="text-xs sm:text-sm font-extrabold text-slate-900">
+                                  Kotak Perhitungan Sisa Pagu Anggaran
+                                </h4>
+                                <p className="text-[11px] text-slate-600">
+                                  Rumus:{' '}
+                                  <strong>
+                                    {isUsingPerubahan
+                                      ? 'Alokasi Anggaran Perubahan'
+                                      : 'Alokasi Anggaran'}{' '}
+                                    − Realisasi Semester 1 − Realisasi Semester 2
+                                  </strong>
+                                </p>
+                              </div>
+                            </div>
+                            <span
+                              className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border ${
+                                isUsingPerubahan
+                                  ? 'bg-indigo-100/80 text-indigo-800 border-indigo-200'
+                                  : 'bg-blue-100/80 text-blue-800 border-blue-200'
+                              }`}
+                            >
+                              Acuan Pagu:{' '}
+                              {isUsingPerubahan
+                                ? 'Alokasi Anggaran Perubahan'
+                                : 'Alokasi Anggaran Murni'}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                            <div className="p-3 rounded-xl bg-white border border-slate-200/80">
+                              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                {isUsingPerubahan
+                                  ? '1. Alokasi Anggaran Perubahan'
+                                  : '1. Alokasi Anggaran'}
+                              </span>
+                              <p className="text-sm font-mono-tabular font-extrabold text-slate-900 mt-1">
+                                {formatRupiah(paguAcuan)}
+                              </p>
+                            </div>
+
+                            <div className="p-3 rounded-xl bg-white border border-slate-200/80">
+                              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                2. Pengurang Realisasi Sem 1
+                              </span>
+                              <p className="text-sm font-mono-tabular font-bold text-slate-700 mt-1">
+                                − {formatRupiah(realisasiSem1)}
+                              </p>
+                            </div>
+
+                            <div className="p-3 rounded-xl bg-white border border-slate-200/80">
+                              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                3. Pengurang Realisasi Sem 2
+                              </span>
+                              <p className="text-sm font-mono-tabular font-bold text-slate-700 mt-1">
+                                − {formatRupiah(realisasiSem2)}
+                              </p>
+                            </div>
+
+                            <div
+                              className={`p-3 rounded-xl border ${
+                                isNegative
+                                  ? 'bg-rose-100/80 border-rose-300'
+                                  : 'bg-emerald-100/70 border-emerald-300'
+                              }`}
+                            >
+                              <span
+                                className={`block text-[10px] font-extrabold uppercase tracking-wider ${
+                                  isNegative ? 'text-rose-800' : 'text-emerald-800'
+                                }`}
+                              >
+                                Sisa Pagu Anggaran
+                              </span>
+                              <p
+                                className={`text-base font-mono-tabular font-extrabold mt-0.5 ${
+                                  isNegative ? 'text-rose-700' : 'text-emerald-900'
+                                }`}
+                              >
+                                {sisaPagu < 0
+                                  ? `- ${formatRupiah(Math.abs(sisaPagu))}`
+                                  : formatRupiah(sisaPagu)}
+                              </p>
+                              <span className="block text-[10px] font-semibold text-slate-600 mt-0.5">
+                                Total Realisasi S1+S2: {formatRupiah(totalRealisasi)} (
+                                {paguAcuan > 0
+                                  ? `${((totalRealisasi / paguAcuan) * 100).toFixed(1)}%`
+                                  : '0%'}
+                                )
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -2098,7 +3647,10 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
               <div className="flex flex-wrap items-center gap-2.5">
                 <button
                   type="button"
-                  onClick={onClose}
+                  onClick={() => {
+                    clearModalDraft();
+                    onClose();
+                  }}
                   className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
                 >
                   {isActiveSemesterLocked ? 'Tutup' : 'Batal'}
@@ -2139,7 +3691,7 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                           selectedSemester === 1
                             ? 'submit'
                             : !isSem1Locked
-                            ? initialRow?.sem1.status_verifikasi === 'Menunggu Verifikasi'
+                            ? effectiveRow?.sem1.status_verifikasi === 'Menunggu Verifikasi'
                               ? 'submit'
                               : 'draft'
                             : 'none',

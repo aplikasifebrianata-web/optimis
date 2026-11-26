@@ -266,10 +266,29 @@
           "type": "string",
           "maxLength": 1500
         },
+        "aktivitas_real_langsung_sem2": {
+          "type": "string",
+          "maxLength": 1500
+        },
+        "aktivitas_real_tidak_langsung_sem2": {
+          "type": "string",
+          "maxLength": 1500
+        },
+        "aktivitas_real_penunjang_sem2": {
+          "type": "string",
+          "maxLength": 1500
+        },
         "alokasi_anggaran": {
           "type": "number"
         },
         "sumber_pembiayaan": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "alokasi_anggaran_perubahan": {
+          "type": "number"
+        },
+        "sumber_pembiayaan_perubahan": {
           "type": "string",
           "maxLength": 300
         },
@@ -303,6 +322,45 @@
         "durasi_pemberian_bantuan": {
           "type": "string",
           "maxLength": 120
+        },
+        "keterangan_durasi_bantuan": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "sifat_bantuan_sem2": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "lokasi_sem2": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "jumlah_sasaran_sem2": {
+          "type": "number"
+        },
+        "satuan_sasaran_sem2": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "keterangan_sasaran_sem2": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "besaran_manfaat_sem2": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "jenis_bantuan_sem2": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "durasi_pemberian_bantuan_sem2": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "keterangan_durasi_bantuan_sem2": {
+          "type": "string",
+          "maxLength": 500
         },
         "ownerId": {
           "type": "string",
@@ -359,6 +417,10 @@
         },
         "realisasi": {
           "type": "number"
+        },
+        "rincian_realisasi": {
+          "type": "string",
+          "maxLength": 1500
         },
         "status_verifikasi": {
           "type": "string",

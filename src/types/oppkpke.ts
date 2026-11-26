@@ -69,8 +69,13 @@ export interface MatrixData {
   aktivitas_real_langsung: string;
   aktivitas_real_tidak_langsung: string;
   aktivitas_real_penunjang: string;
+  aktivitas_real_langsung_sem2?: string;
+  aktivitas_real_tidak_langsung_sem2?: string;
+  aktivitas_real_penunjang_sem2?: string;
   alokasi_anggaran: number;
   sumber_pembiayaan: string;
+  alokasi_anggaran_perubahan?: number;
+  sumber_pembiayaan_perubahan?: string;
   sifat_bantuan: SifatBantuan;
   lokasi: string;
   lokasi_kecamatan?: string;
@@ -83,6 +88,15 @@ export interface MatrixData {
   jenis_bantuan: string;
   durasi_pemberian_bantuan: string;
   keterangan_durasi_bantuan?: string;
+  sifat_bantuan_sem2?: SifatBantuan;
+  lokasi_sem2?: string;
+  jumlah_sasaran_sem2?: number;
+  satuan_sasaran_sem2?: string;
+  keterangan_sasaran_sem2?: string;
+  besaran_manfaat_sem2?: string;
+  jenis_bantuan_sem2?: string;
+  durasi_pemberian_bantuan_sem2?: string;
+  keterangan_durasi_bantuan_sem2?: string;
   created_at: string;
   updated_at: string;
 }
