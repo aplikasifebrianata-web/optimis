@@ -182,16 +182,17 @@ function mergeMatricesWithLocal(remoteItems: MatrixData[]): MatrixData[] {
     const local = localMap.get(id);
     if (local) {
       const recentWriteAt = recentLocalMatrixWriteMs.get(id) || 0;
-      const localMs = Date.parse(local.updated_at || '') || 0;
-      const remoteMs = Date.parse(remote.updated_at || '') || 0;
+      const isActivelyWrittenInThisTab = recentWriteAt > 0 && nowMs - recentWriteAt < 15000;
 
-      // Jika data lokal baru saja disimpan (< 20 detik) atau memiliki timestamp lebih baru, pertahankan data lokal
-      if (nowMs - recentWriteAt < 20000 || localMs > remoteMs + 1000) {
+      // Hanya pertahankan data lokal di atas remote apabila tab ini baru saja menulis (< 15 detik lalu).
+      // Jangan pernah menggunakan perbandingan jam perangkat (localMs > remoteMs) karena selisih jam
+      // antar perangkat/akun (clock skew) membuat data lama menimpa progres baru pengguna lain.
+      if (isActivelyWrittenInThisTab) {
         mergedMap.set(id, {
           ...remote,
           ...local,
           keterangan_durasi_bantuan:
-            local.keterangan_durasi_bantuan || remote.keterangan_durasi_bantuan || '',
+            local.keterangan_durasi_bantuan ?? remote.keterangan_durasi_bantuan ?? '',
           aktivitas_real_langsung_sem2:
             local.aktivitas_real_langsung_sem2 ?? remote.aktivitas_real_langsung_sem2 ?? '',
           aktivitas_real_tidak_langsung_sem2:
@@ -203,14 +204,14 @@ function mergeMatricesWithLocal(remoteItems: MatrixData[]): MatrixData[] {
           alokasi_anggaran_perubahan:
             local.alokasi_anggaran_perubahan ?? remote.alokasi_anggaran_perubahan ?? 0,
           sumber_pembiayaan_perubahan:
-            local.sumber_pembiayaan_perubahan || remote.sumber_pembiayaan_perubahan || '',
+            local.sumber_pembiayaan_perubahan ?? remote.sumber_pembiayaan_perubahan ?? '',
           sifat_bantuan_sem2:
-            local.sifat_bantuan_sem2 || remote.sifat_bantuan_sem2 || '',
+            local.sifat_bantuan_sem2 ?? remote.sifat_bantuan_sem2 ?? '',
           lokasi_sem2: local.lokasi_sem2 ?? remote.lokasi_sem2 ?? '',
           jumlah_sasaran_sem2:
             local.jumlah_sasaran_sem2 ?? remote.jumlah_sasaran_sem2 ?? 0,
           satuan_sasaran_sem2:
-            local.satuan_sasaran_sem2 || remote.satuan_sasaran_sem2 || 'KPM',
+            local.satuan_sasaran_sem2 ?? remote.satuan_sasaran_sem2 ?? 'KPM',
           keterangan_sasaran_sem2:
             local.keterangan_sasaran_sem2 ?? remote.keterangan_sasaran_sem2 ?? '',
           besaran_manfaat_sem2:
@@ -228,8 +229,10 @@ function mergeMatricesWithLocal(remoteItems: MatrixData[]): MatrixData[] {
         });
         return;
       }
-      // Pertahankan field tambahan lokal bila remote belum menyimpannya
+
+      // Gunakan data terbaru dari Cloud Firestore (remote), fallback ke local hanya bila field remote undefined/kosong karena fallback legacy rules
       mergedMap.set(id, {
+        ...local,
         ...remote,
         keterangan_durasi_bantuan:
           remote.keterangan_durasi_bantuan || local.keterangan_durasi_bantuan || '',
@@ -273,16 +276,14 @@ function mergeMatricesWithLocal(remoteItems: MatrixData[]): MatrixData[] {
     mergedMap.set(id, remote);
   });
 
-  // Pastikan baris lokal yang sedang dalam antrean kirim (atau baru dibuat < 30 detik) tidak hilang
+  // Pastikan baris lokal yang sedang dalam antrean kirim oleh tab ini tidak hilang sebelum snapshot masuk
   localItems.forEach((local) => {
     const id = local.matrix_id;
     if (!id || pendingDeletedMatrixIds.has(id) || mergedMap.has(id)) return;
     const recentWriteAt = recentLocalMatrixWriteMs.get(id) || 0;
-    const createdMs = Date.parse(local.created_at || local.updated_at || '') || 0;
     if (
       pendingMatrixWrites.has(id) ||
-      nowMs - recentWriteAt < 30000 ||
-      nowMs - createdMs < 30000
+      (recentWriteAt > 0 && nowMs - recentWriteAt < 30000)
     ) {
       mergedMap.set(id, local);
     }
@@ -321,20 +322,20 @@ function mergeRealisasisWithLocal(remoteItems: RealisasiSemester[]): RealisasiSe
     const local = localMap.get(id);
     if (local) {
       const recentWriteAt = recentLocalRealisasiWriteMs.get(id) || 0;
-      const localMs = Date.parse(local.updated_at || '') || 0;
-      const remoteMs = Date.parse(remote.updated_at || '') || 0;
+      const isActivelyWrittenInThisTab = recentWriteAt > 0 && nowMs - recentWriteAt < 15000;
 
-      if (nowMs - recentWriteAt < 20000 || localMs > remoteMs + 1000) {
+      if (isActivelyWrittenInThisTab) {
         mergedMap.set(id, {
           ...remote,
           ...local,
           rincian_realisasi:
-            local.rincian_realisasi || remote.rincian_realisasi || '',
+            local.rincian_realisasi ?? remote.rincian_realisasi ?? '',
         });
         return;
       }
 
       mergedMap.set(id, {
+        ...local,
         ...remote,
         rincian_realisasi:
           remote.rincian_realisasi || local.rincian_realisasi || '',
@@ -356,11 +357,9 @@ function mergeRealisasisWithLocal(remoteItems: RealisasiSemester[]): RealisasiSe
       return;
     }
     const recentWriteAt = recentLocalRealisasiWriteMs.get(id) || 0;
-    const updatedMs = Date.parse(local.updated_at || '') || 0;
     if (
       pendingRealisasiWrites.has(id) ||
-      nowMs - recentWriteAt < 30000 ||
-      nowMs - updatedMs < 30000
+      (recentWriteAt > 0 && nowMs - recentWriteAt < 30000)
     ) {
       mergedMap.set(id, local);
     }
@@ -795,8 +794,8 @@ export class DatabaseService {
         saveTable(STORAGE_KEYS.PERIODE, items, true);
       }
 
-      if (!opdsSnap.empty || !opdsSnap.metadata.fromCache) {
-        const items: OPD[] = opdsSnap.docs.map((d) => {
+      if (!opdsSnap.empty) {
+        const remoteOpds: OPD[] = opdsSnap.docs.map((d) => {
           const data = d.data();
           return {
             opd_id: String(data.opd_id || d.id),
@@ -807,11 +806,19 @@ export class DatabaseService {
             kepala_opd: String(data.kepala_opd || ''),
           };
         });
-        saveTable(STORAGE_KEYS.OPD, items, true);
+        const localOpds = loadTable<OPD>(STORAGE_KEYS.OPD, []);
+        const opdMap = new Map<string, OPD>();
+        localOpds.forEach((o) => {
+          if (o?.opd_id) opdMap.set(o.opd_id, o);
+        });
+        remoteOpds.forEach((o) => {
+          if (o?.opd_id) opdMap.set(o.opd_id, o);
+        });
+        saveTable(STORAGE_KEYS.OPD, Array.from(opdMap.values()), true);
       }
 
       if (!usersSnap.empty) {
-        const items: AuthUser[] = usersSnap.docs.map((d) => {
+        const remoteUsers: AuthUser[] = usersSnap.docs.map((d) => {
           const data = d.data();
           const uname = String(data.username || '');
           return {
@@ -828,10 +835,19 @@ export class DatabaseService {
             jabatan: String(data.jabatan || ''),
           };
         });
-        if (!items.some((u) => u.role === 'ADMIN')) {
-          items.unshift(SEED_USERS[0]);
+        const localUsers = loadTable<AuthUser>(STORAGE_KEYS.USERS, []);
+        const userMap = new Map<string, AuthUser>();
+        localUsers.forEach((u) => {
+          if (u?.user_id) userMap.set(u.user_id, u);
+        });
+        remoteUsers.forEach((u) => {
+          if (u?.user_id) userMap.set(u.user_id, u);
+        });
+        const mergedUsers = Array.from(userMap.values());
+        if (!mergedUsers.some((u) => u.role === 'ADMIN')) {
+          mergedUsers.unshift(SEED_USERS[0]);
         }
-        saveTable(STORAGE_KEYS.USERS, items, true);
+        saveTable(STORAGE_KEYS.USERS, mergedUsers, true);
       } else if (!usersSnap.metadata.fromCache && !hasTriggeredInitialCloudSeed) {
         hasTriggeredInitialCloudSeed = true;
         await this.syncAllLocalToFirestore();
@@ -1053,8 +1069,8 @@ export class DatabaseService {
         onSnapshot(
           collection(db, 'opds'),
           (snap) => {
-            if (!snap.empty || !snap.metadata.fromCache) {
-              const items: OPD[] = snap.docs.map((d) => {
+            if (!snap.empty) {
+              const remoteOpds: OPD[] = snap.docs.map((d) => {
                 const data = d.data();
                 return {
                   opd_id: String(data.opd_id || d.id),
@@ -1065,7 +1081,15 @@ export class DatabaseService {
                   kepala_opd: String(data.kepala_opd || ''),
                 };
               });
-              saveTable(STORAGE_KEYS.OPD, items, true);
+              const localOpds = loadTable<OPD>(STORAGE_KEYS.OPD, []);
+              const opdMap = new Map<string, OPD>();
+              localOpds.forEach((o) => {
+                if (o?.opd_id) opdMap.set(o.opd_id, o);
+              });
+              remoteOpds.forEach((o) => {
+                if (o?.opd_id) opdMap.set(o.opd_id, o);
+              });
+              saveTable(STORAGE_KEYS.OPD, Array.from(opdMap.values()), true);
               onDataChanged();
             }
           },
@@ -1080,7 +1104,7 @@ export class DatabaseService {
           collection(db, 'user_accounts'),
           (snap) => {
             if (!snap.empty) {
-              const items: AuthUser[] = snap.docs.map((d) => {
+              const remoteUsers: AuthUser[] = snap.docs.map((d) => {
                 const data = d.data();
                 const uname = String(data.username || '');
                 return {
@@ -1097,10 +1121,19 @@ export class DatabaseService {
                   jabatan: String(data.jabatan || ''),
                 };
               });
-              if (!items.some((u) => u.role === 'ADMIN')) {
-                items.unshift(SEED_USERS[0]);
+              const localUsers = loadTable<AuthUser>(STORAGE_KEYS.USERS, []);
+              const userMap = new Map<string, AuthUser>();
+              localUsers.forEach((u) => {
+                if (u?.user_id) userMap.set(u.user_id, u);
+              });
+              remoteUsers.forEach((u) => {
+                if (u?.user_id) userMap.set(u.user_id, u);
+              });
+              const mergedUsers = Array.from(userMap.values());
+              if (!mergedUsers.some((u) => u.role === 'ADMIN')) {
+                mergedUsers.unshift(SEED_USERS[0]);
               }
-              saveTable(STORAGE_KEYS.USERS, items, true);
+              saveTable(STORAGE_KEYS.USERS, mergedUsers, true);
               onDataChanged();
             }
           },

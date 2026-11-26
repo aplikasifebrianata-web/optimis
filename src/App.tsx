@@ -202,11 +202,16 @@ export default function App() {
 
   const activeOpd = useMemo(() => {
     if (currentUser?.opd_id) {
-      return (
-        allOpds.find((o) => o.opd_id === currentUser.opd_id) ||
-        allOpds[0] ||
-        FALLBACK_EMPTY_OPD
-      );
+      const matched = allOpds.find((o) => o.opd_id === currentUser.opd_id);
+      if (matched) return matched;
+      return {
+        opd_id: currentUser.opd_id,
+        kode_opd: '1.00.01',
+        nama_opd: currentUser.instansi_lengkap || currentUser.display_name,
+        singkatan: currentUser.instansi_label || currentUser.username.toUpperCase(),
+        kategori: currentUser.kategori || 'OPD/Dinas/Badan',
+        kepala_opd: `Kepala ${currentUser.instansi_lengkap || currentUser.display_name}`,
+      };
     }
     return allOpds[0] || FALLBACK_EMPTY_OPD;
   }, [allOpds, currentUser]);

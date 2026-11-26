@@ -252,23 +252,27 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
   const [realisasiSem2, setRealisasiSem2] = useState<number>(0);
   const [rincianRealisasiSem2, setRincianRealisasiSem2] = useState<string>('');
 
-  // Kunci sesi form aktif agar refresh real-time dari akun lain TIDAK me-reset step atau input yang sedang diketik
+  // Kunci sesi form aktif agar refresh real-time dari akun lain TIDAK PERNAH me-reset step atau input yang sedang diketik
   const initializedSessionKeyRef = useRef<string | null>(null);
+  const existingRowsRef = useRef<EnrichedMatrixRow[]>(existingRows);
+  useEffect(() => {
+    existingRowsRef.current = existingRows;
+  }, [existingRows]);
 
   const activeModalSessionKey = useMemo(() => {
     if (!isOpen) return null;
     if (initialRow) {
-      return `edit:${activePeriode.periode_id}:${initialRow.matrix_id}`;
+      return `edit:${activePeriode.periode_id}:${selectedSemester}:${initialRow.matrix_id}`;
     }
     if (initialSipdItem) {
-      return `sipd:${activePeriode.periode_id}:${activeOpd.opd_id}:${initialSipdItem.sipd_id || initialSipdItem.kode_sub_kegiatan}`;
+      return `sipd:${activePeriode.periode_id}:${selectedSemester}:${activeOpd.opd_id}:${initialSipdItem.sipd_id || initialSipdItem.kode_sub_kegiatan}`;
     }
-    return `new:${activePeriode.periode_id}:${activeOpd.opd_id}`;
-  }, [isOpen, initialRow?.matrix_id, initialSipdItem, activePeriode.periode_id, activeOpd.opd_id]);
+    return `new:${activePeriode.periode_id}:${selectedSemester}:${activeOpd.opd_id}`;
+  }, [isOpen, initialRow?.matrix_id, initialSipdItem, activePeriode.periode_id, selectedSemester, activeOpd.opd_id]);
 
   const draftStorageKey = useMemo(() => {
     if (!activeModalSessionKey) return null;
-    return `optimis_matrix_form_draft_v2_${activeModalSessionKey}`;
+    return `optimis_matrix_form_draft_v3_${activeModalSessionKey}`;
   }, [activeModalSessionKey]);
 
   const clearModalDraft = useCallback(() => {
@@ -280,7 +284,7 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
     }
   }, [draftStorageKey]);
 
-  // Sinkronisasi data HANYA sekali saat modal pertama kali dibuka untuk baris terkait
+  // Sinkronisasi data HANYA sekali saat modal pertama kali dibuka untuk sesi baris terkait
   useEffect(() => {
     if (!isOpen || !activeModalSessionKey) {
       initializedSessionKeyRef.current = null;
@@ -293,37 +297,44 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
     }
     initializedSessionKeyRef.current = activeModalSessionKey;
 
-    // Cek apakah ada draft pengisian yang belum disimpan pada sesi tab ini
+    // Cek apakah ada draft pengisian yang belum disimpan pada sesi tab ini (tanpa gagal karena perubahan updated_at dari akun lain)
     let restoredFromDraft = false;
     if (draftStorageKey) {
       try {
         const rawDraft = sessionStorage.getItem(draftStorageKey);
         if (rawDraft) {
           const parsed = JSON.parse(rawDraft);
-          const expectedBaseUpdated = initialRow?.updated_at || null;
-          if (parsed && typeof parsed === 'object' && parsed.baseUpdatedAt === expectedBaseUpdated) {
+          if (parsed && typeof parsed === 'object' && parsed.hasActiveDraft === true) {
+            if (parsed.matchedSem1RowId) {
+              const foundMatched = existingRowsRef.current.find(
+                (r) => r.matrix_id === parsed.matchedSem1RowId
+              );
+              setMatchedSem1Row(foundMatched || null);
+            } else {
+              setMatchedSem1Row(null);
+            }
             setCurrentStep((parsed.currentStep as 1 | 2 | 3 | 4) || 1);
             setSelectedOpdId(parsed.selectedOpdId || initialRow?.opd_id || activeOpd.opd_id);
             setStrategi(parsed.strategi || STRATEGI_OPPKPKE_LIST[0]);
-            setKodeProgram(parsed.kodeProgram || '');
-            setProgram(parsed.program || '');
-            setKodeKegiatan(parsed.kodeKegiatan || '');
-            setKegiatan(parsed.kegiatan || '');
-            setSubKegiatan(parsed.subKegiatan || '');
-            setKodeRekening(parsed.kodeRekening || '');
-            setAktivitasLangsung(parsed.aktivitasLangsung || '');
-            setAktivitasTidakLangsung(parsed.aktivitasTidakLangsung || '');
-            setAktivitasPenunjang(parsed.aktivitasPenunjang || '');
-            setAktivitasLangsungSem2(parsed.aktivitasLangsungSem2 || '');
-            setAktivitasTidakLangsungSem2(parsed.aktivitasTidakLangsungSem2 || '');
-            setAktivitasPenunjangSem2(parsed.aktivitasPenunjangSem2 || '');
+            setKodeProgram(parsed.kodeProgram ?? '');
+            setProgram(parsed.program ?? '');
+            setKodeKegiatan(parsed.kodeKegiatan ?? '');
+            setKegiatan(parsed.kegiatan ?? '');
+            setSubKegiatan(parsed.subKegiatan ?? '');
+            setKodeRekening(parsed.kodeRekening ?? '');
+            setAktivitasLangsung(parsed.aktivitasLangsung ?? '');
+            setAktivitasTidakLangsung(parsed.aktivitasTidakLangsung ?? '');
+            setAktivitasPenunjang(parsed.aktivitasPenunjang ?? '');
+            setAktivitasLangsungSem2(parsed.aktivitasLangsungSem2 ?? '');
+            setAktivitasTidakLangsungSem2(parsed.aktivitasTidakLangsungSem2 ?? '');
+            setAktivitasPenunjangSem2(parsed.aktivitasPenunjangSem2 ?? '');
             setAlokasiAnggaran(Number(parsed.alokasiAnggaran) || 0);
             setSelectedSumberList(
               Array.isArray(parsed.selectedSumberList) && parsed.selectedSumberList.length > 0
                 ? parsed.selectedSumberList
                 : ['APBD Kabupaten']
             );
-            setCustomSumberInput(parsed.customSumberInput || '');
+            setCustomSumberInput(parsed.customSumberInput ?? '');
             setShowAnggaranPerubahan(Boolean(parsed.showAnggaranPerubahan));
             setAlokasiAnggaranPerubahan(Number(parsed.alokasiAnggaranPerubahan) || 0);
             setSelectedSumberPerubahanList(
@@ -332,29 +343,29 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                 ? parsed.selectedSumberPerubahanList
                 : ['APBDP Kabupaten']
             );
-            setCustomSumberPerubahanInput(parsed.customSumberPerubahanInput || '');
+            setCustomSumberPerubahanInput(parsed.customSumberPerubahanInput ?? '');
             setSifatBantuan(parsed.sifatBantuan || 'Berkelanjutan');
-            setLokasiKegiatan(parsed.lokasiKegiatan || 'Kabupaten Blora');
-            setDeskripsiSasaran(parsed.deskripsiSasaran || '');
-            setBesaranManfaat(parsed.besaranManfaat || '');
+            setLokasiKegiatan(parsed.lokasiKegiatan ?? 'Kabupaten Blora');
+            setDeskripsiSasaran(parsed.deskripsiSasaran ?? '');
+            setBesaranManfaat(parsed.besaranManfaat ?? '');
             setJenisBantuan(parsed.jenisBantuan || 'Bantuan sosial');
-            setCustomJenisBantuan(parsed.customJenisBantuan || '');
+            setCustomJenisBantuan(parsed.customJenisBantuan ?? '');
             setDurasiAngka(Number(parsed.durasiAngka) || 1);
             setDurasiSatuan(parsed.durasiSatuan || 'tahun');
-            setKeteranganDurasiBantuan(parsed.keteranganDurasiBantuan || '');
+            setKeteranganDurasiBantuan(parsed.keteranganDurasiBantuan ?? '');
             setSifatBantuanSem2(parsed.sifatBantuanSem2 || 'Berkelanjutan');
-            setLokasiKegiatanSem2(parsed.lokasiKegiatanSem2 || '');
-            setDeskripsiSasaranSem2(parsed.deskripsiSasaranSem2 || '');
-            setBesaranManfaatSem2(parsed.besaranManfaatSem2 || '');
+            setLokasiKegiatanSem2(parsed.lokasiKegiatanSem2 ?? '');
+            setDeskripsiSasaranSem2(parsed.deskripsiSasaranSem2 ?? '');
+            setBesaranManfaatSem2(parsed.besaranManfaatSem2 ?? '');
             setJenisBantuanSem2(parsed.jenisBantuanSem2 || 'Bantuan sosial');
-            setCustomJenisBantuanSem2(parsed.customJenisBantuanSem2 || '');
+            setCustomJenisBantuanSem2(parsed.customJenisBantuanSem2 ?? '');
             setDurasiAngkaSem2(Number(parsed.durasiAngkaSem2) || 1);
             setDurasiSatuanSem2(parsed.durasiSatuanSem2 || 'tahun');
-            setKeteranganDurasiBantuanSem2(parsed.keteranganDurasiBantuanSem2 || '');
+            setKeteranganDurasiBantuanSem2(parsed.keteranganDurasiBantuanSem2 ?? '');
             setRealisasiSem1(Number(parsed.realisasiSem1) || 0);
-            setRincianRealisasiSem1(parsed.rincianRealisasiSem1 || '');
+            setRincianRealisasiSem1(parsed.rincianRealisasiSem1 ?? '');
             setRealisasiSem2(Number(parsed.realisasiSem2) || 0);
-            setRincianRealisasiSem2(parsed.rincianRealisasiSem2 || '');
+            setRincianRealisasiSem2(parsed.rincianRealisasiSem2 ?? '');
             restoredFromDraft = true;
           }
         }
@@ -536,16 +547,25 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
     void SipdService.loadSipdDataset().then((res) => {
       setSipdList(res.uniqueRows);
     });
-  }, [
-    isOpen,
-    activeModalSessionKey,
-    draftStorageKey,
-    initialRow,
-    initialSipdItem,
-    activeOpd,
-    allOpds,
-    userRole,
-  ]);
+    // Hanya jalankan saat isOpen atau activeModalSessionKey berubah agar re-render dari akun lain tidak pernah memicu efek ini
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, activeModalSessionKey, draftStorageKey]);
+
+  // Jika matchedSem1Row belum terisi tetapi ada di draft (misal existingRows baru termuat), hubungkan tanpa mereset input
+  useEffect(() => {
+    if (!isOpen || matchedSem1Row || !draftStorageKey || existingRows.length === 0) return;
+    try {
+      const rawDraft = sessionStorage.getItem(draftStorageKey);
+      if (!rawDraft) return;
+      const parsed = JSON.parse(rawDraft);
+      if (parsed?.matchedSem1RowId) {
+        const found = existingRows.find((r) => r.matrix_id === parsed.matchedSem1RowId);
+        if (found) setMatchedSem1Row(found);
+      }
+    } catch {
+      // ignore
+    }
+  }, [isOpen, matchedSem1Row, draftStorageKey, existingRows]);
 
   // Simpan progres pengisian sementara secara otomatis ke sessionStorage selama modal terbuka
   useEffect(() => {
@@ -556,7 +576,8 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
       sessionStorage.setItem(
         draftStorageKey,
         JSON.stringify({
-          baseUpdatedAt: initialRow?.updated_at || null,
+          hasActiveDraft: true,
+          matchedSem1RowId: matchedSem1Row?.matrix_id || null,
           currentStep,
           selectedOpdId,
           strategi,
@@ -610,7 +631,7 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
     isOpen,
     draftStorageKey,
     activeModalSessionKey,
-    initialRow?.updated_at,
+    matchedSem1Row?.matrix_id,
     currentStep,
     selectedOpdId,
     strategi,
