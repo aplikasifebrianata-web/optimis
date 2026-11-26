@@ -89,9 +89,9 @@ function analyzeRowHistory(row: EnrichedMatrixRow): RowHistoryAnalysis {
 
   const realisasiSem1 = Number(row.sem1?.realisasi) || 0;
   const realisasiSem2 = Number(row.sem2?.realisasi) || 0;
-  const totalRealisasi = realisasiSem1 + realisasiSem2;
-  const sisaPagu = paguAcuan - realisasiSem1 - realisasiSem2;
-  const persenRealisasiTotal = paguAcuan > 0 ? (totalRealisasi / paguAcuan) * 100 : 0;
+  const totalRealisasi = realisasiSem2;
+  const sisaPagu = paguAcuan - realisasiSem2;
+  const persenRealisasiTotal = paguAcuan > 0 ? (realisasiSem2 / paguAcuan) * 100 : 0;
 
   const sem1Langsung = (row.aktivitas_real_langsung || '').trim();
   const sem1TidakLangsung = (row.aktivitas_real_tidak_langsung || '').trim();
@@ -1287,12 +1287,12 @@ export const SystemGovernanceView: React.FC<SystemGovernanceViewProps> = ({
                     </div>
                   </div>
 
-                  {/* 4. REALISASI SEMESTER 1, REALISASI SEMESTER 2 & PERHITUNGAN SISA PAGU */}
+                  {/* 4. REALISASI SEMESTER 1, REALISASI AKUMULASI/FINAL & PERHITUNGAN SISA PAGU */}
                   <div className="space-y-4">
                     <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 flex items-center gap-2">
                       <FileText className="w-4 h-4 text-[#2563EB]" />
                       <span>
-                        4. Rincian Realisasi Semester 1, Realisasi Semester 2 & Sisa Pagu Anggaran
+                        4. Rincian Realisasi Semester 1, Realisasi Akumulasi/Final & Sisa Pagu Anggaran
                       </span>
                     </h3>
 
@@ -1344,15 +1344,15 @@ export const SystemGovernanceView: React.FC<SystemGovernanceViewProps> = ({
                         )}
                       </div>
 
-                      {/* Realisasi Semester 2 */}
+                      {/* Realisasi Akumulasi/Final */}
                       <div className="p-4 rounded-2xl bg-[#F8FAFF] border border-indigo-200/80 space-y-2.5">
                         <div className="flex items-center justify-between gap-2">
                           <div>
                             <h4 className="text-xs font-extrabold text-slate-900">
-                              Realisasi Semester 2 (Juli – Desember {activePeriode.tahun})
+                              Realisasi Akumulasi/Final — TA {activePeriode.tahun}
                             </h4>
                             <p className="text-[11px] text-slate-500">
-                              Terhadap Pagu Acuan ({formatRupiah(selectedAnalysis.paguAcuan)})
+                              Terhadap Alokasi Pagu Anggaran Perubahan ({formatRupiah(selectedAnalysis.paguAcuan)})
                             </p>
                           </div>
                           <StatusIndicator status={selectedAnalysis.row.sem2.status_verifikasi} />
@@ -1363,7 +1363,7 @@ export const SystemGovernanceView: React.FC<SystemGovernanceViewProps> = ({
                             {formatRupiah(selectedAnalysis.realisasiSem2)}
                           </p>
                           <span className="text-xs font-mono-tabular font-bold text-slate-700">
-                            Capaian S2:{' '}
+                            Capaian Akumulasi/Final:{' '}
                             {selectedAnalysis.paguAcuan > 0
                               ? `${(
                                   (selectedAnalysis.realisasiSem2 / selectedAnalysis.paguAcuan) *
@@ -1375,24 +1375,24 @@ export const SystemGovernanceView: React.FC<SystemGovernanceViewProps> = ({
 
                         <div className="p-3 rounded-xl bg-white border border-slate-200/80 space-y-1">
                           <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                            Rincian Realisasi Semester 2
+                            Rincian Realisasi Akumulasi/Final
                           </span>
                           <p className="text-xs text-slate-700 whitespace-pre-line">
                             {selectedAnalysis.row.sem2.rincian_realisasi ||
-                              'Belum ada keterangan rincian realisasi Semester 2.'}
+                              'Belum ada keterangan rincian realisasi akumulasi/final.'}
                           </p>
                         </div>
 
                         {selectedAnalysis.row.sem2.catatan_verifikator && (
                           <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
-                            <strong>Catatan Verifikator Sem 2:</strong>{' '}
+                            <strong>Catatan Verifikator Realisasi Akumulasi/Final:</strong>{' '}
                             {selectedAnalysis.row.sem2.catatan_verifikator}
                           </p>
                         )}
                       </div>
                     </div>
 
-                    {/* KOTAK PERHITUNGAN SISA PAGU AKHIR */}
+                    {/* PERHITUNGAN SISA PAGU ANGGARAN */}
                     <div
                       className={`p-5 rounded-2xl border-2 space-y-3.5 ${
                         selectedAnalysis.sisaPagu < 0
@@ -1411,65 +1411,51 @@ export const SystemGovernanceView: React.FC<SystemGovernanceViewProps> = ({
                           />
                           <div>
                             <h4 className="text-xs sm:text-sm font-extrabold text-slate-900">
-                              Perhitungan Sisa Pagu Anggaran Akhir (Semester 1 & Semester 2)
+                              Perhitungan Sisa Pagu Anggaran
                             </h4>
                             <p className="text-[11px] text-slate-600">
                               Rumus:{' '}
                               <strong>
-                                {selectedAnalysis.hasAnggaranPerubahan
-                                  ? 'Alokasi Anggaran Perubahan'
-                                  : 'Alokasi Anggaran Murni'}{' '}
-                                − Realisasi Semester 1 − Realisasi Semester 2
+                                Alokasi Pagu Anggaran Perubahan − Realisasi Akumulasi/Final
                               </strong>
                             </p>
                           </div>
                         </div>
-                        <span
-                          className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border ${
-                            selectedAnalysis.hasAnggaranPerubahan
-                              ? 'bg-indigo-100/80 text-indigo-800 border-indigo-200'
-                              : 'bg-blue-100/80 text-blue-800 border-blue-200'
-                          }`}
-                        >
-                          Pengurang Menggunakan:{' '}
-                          {selectedAnalysis.hasAnggaranPerubahan
-                            ? 'Alokasi Anggaran Perubahan'
-                            : 'Alokasi Anggaran Murni'}
+                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg border bg-indigo-100/80 text-indigo-800 border-indigo-200">
+                          Acuan Pagu: Alokasi Pagu Anggaran Perubahan
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                        <div className="p-3 rounded-xl bg-white border border-slate-200/80">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="p-3.5 rounded-xl bg-white border border-slate-200/80">
                           <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                            {selectedAnalysis.hasAnggaranPerubahan
-                              ? '1. Alokasi Anggaran Perubahan'
-                              : '1. Alokasi Anggaran Murni'}
+                            1. Alokasi Pagu Anggaran Perubahan
                           </span>
                           <p className="text-sm font-mono-tabular font-extrabold text-slate-900 mt-1">
                             {formatRupiah(selectedAnalysis.paguAcuan)}
                           </p>
+                          {!selectedAnalysis.hasAnggaranPerubahan && (
+                            <span className="block text-[10px] text-slate-500 mt-0.5">
+                              (Menggunakan Pagu Murni karena Perubahan belum diisi)
+                            </span>
+                          )}
                         </div>
 
-                        <div className="p-3 rounded-xl bg-white border border-slate-200/80">
+                        <div className="p-3.5 rounded-xl bg-white border border-slate-200/80">
                           <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                            2. Dikurangi Realisasi Sem 1
+                            2. Pengurang Realisasi Akumulasi/Final
                           </span>
-                          <p className="text-sm font-mono-tabular font-bold text-slate-700 mt-1">
-                            − {formatRupiah(selectedAnalysis.realisasiSem1)}
-                          </p>
-                        </div>
-
-                        <div className="p-3 rounded-xl bg-white border border-slate-200/80">
-                          <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                            3. Dikurangi Realisasi Sem 2
-                          </span>
-                          <p className="text-sm font-mono-tabular font-bold text-slate-700 mt-1">
+                          <p className="text-sm font-mono-tabular font-bold text-indigo-700 mt-1">
                             − {formatRupiah(selectedAnalysis.realisasiSem2)}
                           </p>
+                          <span className="block text-[10px] text-slate-500 mt-0.5">
+                            Capaian Akumulasi/Final:{' '}
+                            {selectedAnalysis.persenRealisasiTotal.toFixed(1)}%
+                          </span>
                         </div>
 
                         <div
-                          className={`p-3 rounded-xl border ${
+                          className={`p-3.5 rounded-xl border ${
                             selectedAnalysis.sisaPagu < 0
                               ? 'bg-rose-100/80 border-rose-300'
                               : 'bg-emerald-100/70 border-emerald-300'
@@ -1496,8 +1482,7 @@ export const SystemGovernanceView: React.FC<SystemGovernanceViewProps> = ({
                               : formatRupiah(selectedAnalysis.sisaPagu)}
                           </p>
                           <span className="block text-[10px] font-semibold text-slate-600 mt-0.5">
-                            Total Realisasi S1+S2: {formatRupiah(selectedAnalysis.totalRealisasi)} (
-                            {selectedAnalysis.persenRealisasiTotal.toFixed(1)}%)
+                            Alokasi Pagu Anggaran Perubahan − Realisasi Akumulasi/Final
                           </span>
                         </div>
                       </div>
