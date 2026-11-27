@@ -424,7 +424,7 @@ export default function App() {
       rincian_realisasi?: string;
       action: 'draft' | 'submit';
     };
-  }) => {
+  }): boolean => {
     const actorName = currentUser?.display_name || `Operator ${activeOpd.singkatan}`;
     const res = DatabaseService.saveOpdMatrixAndRealisasi({
       ...params,
@@ -434,6 +434,7 @@ export default function App() {
     });
     setRefreshTick((t) => t + 1);
     showToast(res.success ? 'success' : 'error', res.message);
+    return res.success;
   };
 
   const handleVerifySemester = (params: {

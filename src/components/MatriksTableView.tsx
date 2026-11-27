@@ -15,6 +15,10 @@ import {
   CheckCircle2,
   Table2,
   Info,
+  ArrowUpDown,
+  Building2,
+  Sparkles,
+  Wallet,
 } from 'lucide-react';
 import {
   EnrichedMatrixRow,
@@ -66,6 +70,7 @@ export const MatriksTableView: React.FC<MatriksTableViewProps> = ({
   const [selectedOpdFilter, setSelectedOpdFilter] = useState<string>('ALL');
   const [selectedStrategi, setSelectedStrategi] = useState<string>('ALL');
   const [selectedSemStatus, setSelectedSemStatus] = useState<string>('ALL');
+  const [sortBy, setSortBy] = useState<string>('opd_asc');
   const [detailModalRow, setDetailModalRow] = useState<EnrichedMatrixRow | null>(null);
   const [confirmDeleteRow, setConfirmDeleteRow] = useState<EnrichedMatrixRow | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -78,7 +83,7 @@ export const MatriksTableView: React.FC<MatriksTableViewProps> = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const filteredRows = useMemo(() => {
-    return rows.filter((r) => {
+    const filtered = rows.filter((r) => {
       if (userRole === 'ADMIN' && selectedOpdFilter !== 'ALL' && r.opd_id !== selectedOpdFilter) {
         return false;
       }
@@ -97,13 +102,70 @@ export const MatriksTableView: React.FC<MatriksTableViewProps> = ({
           r.sub_kegiatan.toLowerCase().includes(q) ||
           r.kode.toLowerCase().includes(q) ||
           r.nama_opd.toLowerCase().includes(q) ||
+          r.singkatan_opd.toLowerCase().includes(q) ||
           r.lokasi.toLowerCase().includes(q) ||
           r.jenis_bantuan.toLowerCase().includes(q);
         if (!match) return false;
       }
       return true;
     });
-  }, [rows, userRole, selectedOpdFilter, selectedStrategi, selectedSemStatus, selectedSemester, searchQuery]);
+
+    const getPaguAcuan = (r: EnrichedMatrixRow) =>
+      (Number(r.alokasi_anggaran_perubahan) || 0) > 0
+        ? Number(r.alokasi_anggaran_perubahan) || 0
+        : Number(r.alokasi_anggaran) || 0;
+
+    const getActiveRealisasi = (r: EnrichedMatrixRow) =>
+      selectedSemester === 1
+        ? Number(r.sem1.realisasi) || 0
+        : (Number(r.sem1.realisasi) || 0) + (Number(r.sem2.realisasi) || 0);
+
+    return [...filtered].sort((a, b) => {
+      switch (sortBy) {
+        case 'opd_asc':
+          return (
+            a.nama_opd.localeCompare(b.nama_opd, 'id') ||
+            a.kode.localeCompare(b.kode, 'id', { numeric: true })
+          );
+        case 'opd_desc':
+          return (
+            b.nama_opd.localeCompare(a.nama_opd, 'id') ||
+            a.kode.localeCompare(b.kode, 'id', { numeric: true })
+          );
+        case 'kode_asc':
+          return a.kode.localeCompare(b.kode, 'id', { numeric: true });
+        case 'kode_desc':
+          return b.kode.localeCompare(a.kode, 'id', { numeric: true });
+        case 'sub_kegiatan_asc':
+          return a.sub_kegiatan.localeCompare(b.sub_kegiatan, 'id');
+        case 'sub_kegiatan_desc':
+          return b.sub_kegiatan.localeCompare(a.sub_kegiatan, 'id');
+        case 'pagu_desc':
+          return getPaguAcuan(b) - getPaguAcuan(a);
+        case 'pagu_asc':
+          return getPaguAcuan(a) - getPaguAcuan(b);
+        case 'realisasi_desc':
+          return getActiveRealisasi(b) - getActiveRealisasi(a);
+        case 'realisasi_asc':
+          return getActiveRealisasi(a) - getActiveRealisasi(b);
+        case 'kelengkapan_desc':
+          return (b.completion_percentage ?? 0) - (a.completion_percentage ?? 0);
+        case 'kelengkapan_asc':
+          return (a.completion_percentage ?? 0) - (b.completion_percentage ?? 0);
+        default:
+          return 0;
+      }
+    });
+  }, [
+    rows,
+    userRole,
+    selectedOpdFilter,
+    selectedStrategi,
+    selectedSemStatus,
+    selectedSemester,
+    searchQuery,
+    sortBy,
+  ]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -219,7 +281,11 @@ export const MatriksTableView: React.FC<MatriksTableViewProps> = ({
 
       {/* Filter Bar & Pencarian */}
       <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-[0_8px_25px_-8px_rgba(15,23,42,0.04)]">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 items-center">
+        <div
+          className={`grid grid-cols-1 md:grid-cols-2 ${
+            userRole === 'ADMIN' ? 'lg:grid-cols-5' : 'lg:grid-cols-4'
+          } gap-3 items-center`}
+        >
           {/* Pencarian */}
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -283,6 +349,32 @@ export const MatriksTableView: React.FC<MatriksTableViewProps> = ({
             <option value="Draft">Draft</option>
             <option value="Belum Diisi">Belum Diisi</option>
           </select>
+
+          {/* Fungsi Sort By (Khusus Laman Admin di Filter Bar Utama) */}
+          {userRole === 'ADMIN' && (
+            <div className="relative">
+              <ArrowUpDown className="w-3.5 h-3.5 text-[#2563EB] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                aria-label="Sort By Data Matriks"
+                className="w-full h-10 pl-8 pr-3 text-xs font-semibold text-slate-800 bg-[#F8FAFF] border border-blue-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB] cursor-pointer"
+              >
+                <option value="opd_asc">Sort By: Nama OPD (A – Z)</option>
+                <option value="opd_desc">Sort By: Nama OPD (Z – A)</option>
+                <option value="kode_asc">Sort By: Kode Rekening (Terkecil)</option>
+                <option value="kode_desc">Sort By: Kode Rekening (Terbesar)</option>
+                <option value="sub_kegiatan_asc">Sort By: Sub Kegiatan (A – Z)</option>
+                <option value="sub_kegiatan_desc">Sort By: Sub Kegiatan (Z – A)</option>
+                <option value="pagu_desc">Sort By: Alokasi Anggaran (Tertinggi)</option>
+                <option value="pagu_asc">Sort By: Alokasi Anggaran (Terendah)</option>
+                <option value="realisasi_desc">Sort By: Realisasi (Tertinggi)</option>
+                <option value="realisasi_asc">Sort By: Realisasi (Terendah)</option>
+                <option value="kelengkapan_desc">Sort By: Kelengkapan (100% – 0%)</option>
+                <option value="kelengkapan_asc">Sort By: Kelengkapan (0% – 100%)</option>
+              </select>
+            </div>
+          )}
         </div>
       </div>
 
@@ -298,9 +390,7 @@ export const MatriksTableView: React.FC<MatriksTableViewProps> = ({
             </span>
           </div>
           <div className="text-[11px] text-slate-500">
-            {selectedSemester === 1
-              ? 'Menampilkan Realisasi Semester 1 beserta Rincian Realisasi'
-              : 'Menampilkan Realisasi Semester 1 dan Realisasi Semester 2 beserta Rincian Realisasi'}
+            Klik pada <strong className="text-slate-700">Nama OPD</strong> atau <strong className="text-[#2563EB]">Kode Rekening</strong> untuk membuka preview rincian lengkap matriks
           </div>
         </div>
 
@@ -365,21 +455,39 @@ export const MatriksTableView: React.FC<MatriksTableViewProps> = ({
                         {index + 1}
                       </td>
 
-                      {/* Kolom OPD & Strategi */}
+                      {/* Kolom OPD & Strategi (Klik Nama OPD untuk membuka preview rincian lengkap matriks) */}
                       <td className="py-4 px-3.5">
-                        <p className="font-bold text-slate-900">{row.singkatan_opd}</p>
-                        <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
-                          {row.nama_opd}
-                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setDetailModalRow(row)}
+                          className="text-left group/opd cursor-pointer focus:outline-none block w-full"
+                          title={`Klik Nama OPD (${row.nama_opd}) untuk membuka preview rincian lengkap matriks`}
+                        >
+                          <span className="inline-flex items-center gap-1 font-bold text-slate-900 group-hover/opd:text-[#2563EB] group-hover/opd:underline transition-colors">
+                            <span>{row.singkatan_opd}</span>
+                            <Eye className="w-3 h-3 opacity-0 group-hover/opd:opacity-100 text-[#2563EB] transition-opacity shrink-0" />
+                          </span>
+                          <span className="block text-[11px] text-slate-500 group-hover/opd:text-[#1D4ED8] line-clamp-1 mt-0.5 transition-colors">
+                            {row.nama_opd}
+                          </span>
+                        </button>
                         <p className="text-[11px] text-[#2563EB] font-medium mt-1.5">
                           {row.strategi}
                         </p>
                       </td>
 
-                      {/* Kolom Kode, Program, Kegiatan, Sub Kegiatan */}
+                      {/* Kolom Kode, Program, Kegiatan, Sub Kegiatan (Klik Kode Rekening untuk membuka preview rincian lengkap matriks) */}
                       <td className="py-4 px-3.5 space-y-1">
-                        <div className="font-mono-tabular text-[11px] font-semibold text-[#2563EB]">
-                          {row.kode}
+                        <div>
+                          <button
+                            type="button"
+                            onClick={() => setDetailModalRow(row)}
+                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-blue-50 hover:bg-[#2563EB] text-[#2563EB] hover:text-white border border-blue-200/80 hover:border-[#2563EB] font-mono-tabular text-[11px] font-bold transition-all cursor-pointer"
+                            title={`Klik Kode Rekening (${row.kode}) untuk membuka preview rincian lengkap matriks`}
+                          >
+                            <span>{row.kode}</span>
+                            <Eye className="w-3 h-3 shrink-0" />
+                          </button>
                         </div>
                         <p className="font-bold text-slate-900 leading-snug">
                           {row.sub_kegiatan}
@@ -631,298 +739,439 @@ export const MatriksTableView: React.FC<MatriksTableViewProps> = ({
         </div>
       </div>
 
-      {/* Modal Rincian Lengkap 1 Baris Matriks */}
+      {/* Modal Preview Rincian Lengkap 1 Baris Matriks */}
       <AnimatePresence>
-        {detailModalRow && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-slate-900/45 backdrop-blur-xs flex items-center justify-center p-4"
-          >
+        {detailModalRow && (() => {
+          const paguMurni = Number(detailModalRow.alokasi_anggaran) || 0;
+          const paguPerubahan = Number(detailModalRow.alokasi_anggaran_perubahan) || 0;
+          const hasAnggaranPerubahan = paguPerubahan > 0;
+          const paguAcuan = hasAnggaranPerubahan ? paguPerubahan : paguMurni;
+          const realisasiS1 = Number(detailModalRow.sem1.realisasi) || 0;
+          const realisasiS2 = Number(detailModalRow.sem2.realisasi) || 0;
+          const realisasiFinal = realisasiS1 + realisasiS2;
+          const sisaPagu = paguAcuan - realisasiFinal;
+          const persenFinal = paguAcuan > 0 ? (realisasiFinal / paguAcuan) * 100 : 0;
+
+          const hasKarakteristikSem2 = Boolean(
+            detailModalRow.lokasi_sem2?.trim() ||
+              detailModalRow.keterangan_sasaran_sem2?.trim() ||
+              detailModalRow.besaran_manfaat_sem2?.trim() ||
+              detailModalRow.jenis_bantuan_sem2?.trim() ||
+              detailModalRow.durasi_pemberian_bantuan_sem2?.trim()
+          );
+
+          return (
             <motion.div
-              initial={{ scale: 0.96, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.96, opacity: 0 }}
-              className="bg-white rounded-3xl border border-slate-200 max-w-3xl w-full max-h-[88vh] overflow-y-auto p-6 space-y-5 shadow-2xl"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setDetailModalRow(null)}
+              className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
             >
-              <div className="flex items-start justify-between gap-4 pb-4 border-b border-slate-100">
-                <div>
-                  <p className="text-xs font-mono-tabular font-semibold text-[#2563EB]">
-                    {detailModalRow.kode} · {detailModalRow.singkatan_opd}
-                  </p>
-                  <h3 className="text-lg font-bold text-slate-900 mt-0.5">
-                    {detailModalRow.sub_kegiatan}
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">{detailModalRow.strategi}</p>
-                </div>
-                <button
-                  onClick={() => setDetailModalRow(null)}
-                  className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Progress Bar Kelengkapan Pengisian */}
-              <div className="p-3 bg-[#F8FAFF] rounded-2xl border border-slate-200/80 flex items-center justify-between gap-3 text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-slate-700">Tingkat Kelengkapan Matriks:</span>
-                  <span className="font-mono-tabular font-bold text-[#2563EB]">
-                    {detailModalRow.completion_percentage ?? 0}%
-                  </span>
-                  <span
-                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                      detailModalRow.completion_percentage === 100
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : (detailModalRow.completion_percentage ?? 0) >= 60
-                        ? 'bg-blue-100 text-blue-800'
-                        : 'bg-amber-100 text-amber-800'
-                    }`}
-                  >
-                    {detailModalRow.completion_percentage === 100
-                      ? 'Lengkap (100%)'
-                      : (detailModalRow.completion_percentage ?? 0) >= 60
-                      ? 'Dalam Pengisian'
-                      : 'Belum Lengkap'}
-                  </span>
-                </div>
-                <div className="w-36 sm:w-48 h-2.5 bg-slate-200 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-300 ${
-                      detailModalRow.completion_percentage === 100
-                        ? 'bg-emerald-500'
-                        : 'bg-blue-600'
-                    }`}
-                    style={{ width: `${Math.max(5, detailModalRow.completion_percentage ?? 0)}%` }}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                <div className="p-3.5 rounded-2xl bg-[#F8FAFF] border border-slate-200/70 space-y-2">
-                  <div>
-                    <p className="font-semibold text-slate-800 mb-1">
-                      Aktivitas Real Langsung {selectedSemester === 2 ? '(Semester 1)' : ''}
-                    </p>
-                    <p className="text-slate-600 leading-relaxed">
-                      {detailModalRow.aktivitas_real_langsung || '-'}
-                    </p>
-                  </div>
-                  {selectedSemester === 2 && detailModalRow.aktivitas_real_langsung_sem2?.trim() && (
-                    <div className="pt-2 border-t border-indigo-100">
-                      <p className="font-semibold text-indigo-800 mb-1">
-                        Aktivitas Real Langsung (Semester 2)
-                      </p>
-                      <p className="text-indigo-950 leading-relaxed">
-                        {detailModalRow.aktivitas_real_langsung_sem2}
-                      </p>
-                    </div>
-                  )}
-                </div>
-                <div className="p-3.5 rounded-2xl bg-[#F8FAFF] border border-slate-200/70 space-y-2">
-                  <div>
-                    <p className="font-semibold text-slate-800 mb-1">
-                      Aktivitas Real Tidak Langsung {selectedSemester === 2 ? '(Semester 1)' : ''}
-                    </p>
-                    <p className="text-slate-600 leading-relaxed">
-                      {detailModalRow.aktivitas_real_tidak_langsung || '-'}
-                    </p>
-                  </div>
-                  {selectedSemester === 2 &&
-                    detailModalRow.aktivitas_real_tidak_langsung_sem2?.trim() && (
-                      <div className="pt-2 border-t border-indigo-100">
-                        <p className="font-semibold text-indigo-800 mb-1">
-                          Aktivitas Real Tidak Langsung (Semester 2)
-                        </p>
-                        <p className="text-indigo-950 leading-relaxed">
-                          {detailModalRow.aktivitas_real_tidak_langsung_sem2}
-                        </p>
-                      </div>
-                    )}
-                </div>
-                <div className="p-3.5 rounded-2xl bg-[#F8FAFF] border border-slate-200/70 space-y-2">
-                  <div>
-                    <p className="font-semibold text-slate-800 mb-1">
-                      Aktivitas Real Penunjang {selectedSemester === 2 ? '(Semester 1)' : ''}
-                    </p>
-                    <p className="text-slate-600 leading-relaxed">
-                      {detailModalRow.aktivitas_real_penunjang || '-'}
-                    </p>
-                  </div>
-                  {selectedSemester === 2 && detailModalRow.aktivitas_real_penunjang_sem2?.trim() && (
-                    <div className="pt-2 border-t border-indigo-100">
-                      <p className="font-semibold text-indigo-800 mb-1">
-                        Aktivitas Real Penunjang (Semester 2)
-                      </p>
-                      <p className="text-indigo-950 leading-relaxed">
-                        {detailModalRow.aktivitas_real_penunjang_sem2}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
-                <div className="p-3 rounded-xl border border-slate-200">
-                  <span className="text-slate-500 block">Alokasi Anggaran</span>
-                  <strong className="font-mono-tabular text-slate-900 text-sm">
-                    {formatRupiah(detailModalRow.alokasi_anggaran)}
-                  </strong>
-                  {(Number(detailModalRow.alokasi_anggaran_perubahan) || 0) > 0 && (
-                    <div className="mt-1.5 pt-1.5 border-t border-indigo-100">
-                      <span className="text-[11px] font-semibold text-indigo-700 block">
-                        Alokasi Anggaran Perubahan:
-                      </span>
-                      <strong className="font-mono-tabular text-indigo-900 text-sm">
-                        {formatRupiah(Number(detailModalRow.alokasi_anggaran_perubahan) || 0)}
-                      </strong>
-                    </div>
-                  )}
-                </div>
-                <div className="p-3 rounded-xl border border-slate-200">
-                  <span className="text-slate-500 block">Sumber Pembiayaan</span>
-                  <strong className="text-slate-900">{detailModalRow.sumber_pembiayaan}</strong>
-                  {(Number(detailModalRow.alokasi_anggaran_perubahan) || 0) > 0 &&
-                    detailModalRow.sumber_pembiayaan_perubahan && (
-                      <div className="mt-1.5 pt-1.5 border-t border-indigo-100">
-                        <span className="text-[11px] font-semibold text-indigo-700 block">
-                          Sumber Pembiayaan Perubahan:
-                        </span>
-                        <strong className="text-indigo-900">
-                          {detailModalRow.sumber_pembiayaan_perubahan}
-                        </strong>
-                      </div>
-                    )}
-                </div>
-                <div className="p-3 rounded-xl border border-slate-200">
-                  <span className="text-slate-500 block">Sifat & Lokasi Kegiatan</span>
-                  <strong className="text-slate-900 block">
-                    {detailModalRow.sifat_bantuan || '-'}
-                  </strong>
-                  <span className="text-[11px] text-slate-600 mt-0.5 block">
-                    Lokasi: {detailModalRow.lokasi || '-'}
-                  </span>
-                </div>
-                <div className="p-3 rounded-xl border border-slate-200 sm:col-span-2 md:col-span-1">
-                  <span className="text-slate-500 block">Target & Rincian Sasaran</span>
-                  <strong className="text-slate-900 block leading-relaxed">
-                    {detailModalRow.keterangan_sasaran?.trim() ||
-                      `${formatNumber(detailModalRow.jumlah_sasaran)} ${
-                        detailModalRow.satuan_sasaran || 'KPM'
-                      }`}
-                  </strong>
-                </div>
-                <div className="p-3 rounded-xl border border-slate-200">
-                  <span className="text-slate-500 block">Besaran Manfaat</span>
-                  <strong className="text-slate-900">{detailModalRow.besaran_manfaat || '-'}</strong>
-                </div>
-                <div className="p-3 rounded-xl border border-slate-200">
-                  <span className="text-slate-500 block">Jenis & Durasi Bantuan</span>
-                  <strong className="text-slate-900 block">
-                    {detailModalRow.jenis_bantuan} ({detailModalRow.durasi_pemberian_bantuan})
-                  </strong>
-                  {detailModalRow.keterangan_durasi_bantuan && (
-                    <span className="text-[11px] text-slate-600 mt-0.5 block">
-                      Ket. Durasi: {detailModalRow.keterangan_durasi_bantuan}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Ringkasan Realisasi & Status Verifikasi (Semester 1 atau Semester 1 & 2) */}
-              <div
-                className={`grid grid-cols-1 ${
-                  selectedSemester === 2 ? 'md:grid-cols-2' : ''
-                } gap-4 text-xs`}
+              <motion.div
+                initial={{ scale: 0.96, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.96, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white rounded-3xl border border-slate-200 max-w-4xl w-full max-h-[90vh] overflow-y-auto p-5 sm:p-6 space-y-5 shadow-2xl"
               >
-                {/* Kartu Realisasi Semester 1 */}
-                <div className="p-4 rounded-2xl bg-[#F8FAFF] border border-blue-100 space-y-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-bold text-slate-800">
-                      Realisasi Semester 1 (TA {activePeriode.tahun}):{' '}
-                      <span className="font-mono-tabular text-[#1D4ED8]">
-                        {formatRupiah(detailModalRow.sem1.realisasi)} (
-                        {detailModalRow.persentase_realisasi_sem1.toFixed(1)}%)
+                {/* Header Preview Rincian Lengkap */}
+                <div className="flex items-start justify-between gap-4 pb-4 border-b border-slate-200/80">
+                  <div className="space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-[#1D4ED8] border border-blue-200 font-mono-tabular font-bold text-xs">
+                        {detailModalRow.kode || '-'}
                       </span>
-                    </span>
-                    <StatusIndicator status={detailModalRow.sem1.status_verifikasi} />
-                  </div>
-                  <div className="bg-white p-2.5 rounded-xl border border-slate-200/80 text-slate-600">
-                    <strong className="text-slate-800 block mb-0.5">
-                      Rincian Realisasi Semester 1:
-                    </strong>
-                    {detailModalRow.sem1.rincian_realisasi?.trim() || '-'}
-                  </div>
-                  {detailModalRow.sem1.catatan_verifikator && (
-                    <p className="text-slate-600 bg-amber-50/70 p-2.5 rounded-xl border border-amber-200/80">
-                      <strong className="text-amber-900">Catatan Verifikator S1:</strong>{' '}
-                      {detailModalRow.sem1.catatan_verifikator}
-                    </p>
-                  )}
-                </div>
-
-                {/* Kartu Realisasi Semester 2 (Tampil jika pilihan awal Semester 2) */}
-                {selectedSemester === 2 && (
-                  <div className="p-4 rounded-2xl bg-[#F8FAFF] border border-indigo-100 space-y-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-bold text-slate-800">
-                        Realisasi Semester 2 (TA {activePeriode.tahun}):{' '}
-                        <span className="font-mono-tabular text-indigo-700">
-                          {formatRupiah(detailModalRow.sem2.realisasi)} (
-                          {detailModalRow.persentase_realisasi_sem2.toFixed(1)}%)
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 font-bold text-xs">
+                        <Building2 className="w-3.5 h-3.5 text-[#2563EB]" />
+                        <span>
+                          {detailModalRow.singkatan_opd} — {detailModalRow.nama_opd}
                         </span>
                       </span>
-                      <StatusIndicator status={detailModalRow.sem2.status_verifikasi} />
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-semibold">
+                        TA {activePeriode.tahun}
+                      </span>
                     </div>
-                    <div className="bg-white p-2.5 rounded-xl border border-slate-200/80 text-slate-600">
-                      <strong className="text-slate-800 block mb-0.5">
-                        Rincian Realisasi Semester 2:
-                      </strong>
-                      {detailModalRow.sem2.rincian_realisasi?.trim() || '-'}
-                    </div>
-                    {detailModalRow.sem2.catatan_verifikator && (
-                      <p className="text-slate-600 bg-amber-50/70 p-2.5 rounded-xl border border-amber-200/80">
-                        <strong className="text-amber-900">Catatan Verifikator S2:</strong>{' '}
-                        {detailModalRow.sem2.catatan_verifikator}
+                    <h3 className="text-base sm:text-lg font-extrabold text-slate-900 leading-snug">
+                      {detailModalRow.sub_kegiatan}
+                    </h3>
+                    <div className="text-xs text-slate-600 space-y-0.5 pt-0.5">
+                      <p>
+                        <strong className="text-slate-800">Strategi OPPKPKE:</strong>{' '}
+                        <span className="text-[#2563EB] font-semibold">{detailModalRow.strategi}</span>
                       </p>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
-                <button
-                  onClick={() => setDetailModalRow(null)}
-                  className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-900 cursor-pointer"
-                >
-                  Tutup
-                </button>
-                {userRole === 'OPD' && (
-                  (selectedSemester === 1
-                    ? detailModalRow.sem1.status_verifikasi
-                    : detailModalRow.sem2.status_verifikasi) === 'Terverifikasi' ? (
-                    <div className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl">
-                      <Lock className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Data Terverifikasi & Terkunci</span>
+                      <p>
+                        <strong className="text-slate-800">Program:</strong> {detailModalRow.program || '-'}
+                      </p>
+                      <p>
+                        <strong className="text-slate-800">Kegiatan:</strong> {detailModalRow.kegiatan || '-'}
+                      </p>
                     </div>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        const target = detailModalRow;
-                        setDetailModalRow(null);
-                        onOpenInputModal(target);
-                      }}
-                      className="px-4 py-2 text-xs font-semibold text-white bg-[#2563EB] rounded-xl hover:bg-[#1D4ED8] cursor-pointer"
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDetailModalRow(null)}
+                    className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer shrink-0"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Progress Bar Kelengkapan Pengisian */}
+                <div className="p-3.5 bg-[#F8FAFF] rounded-2xl border border-slate-200/80 flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-700">Tingkat Kelengkapan Matriks:</span>
+                    <span className="font-mono-tabular font-bold text-[#2563EB]">
+                      {detailModalRow.completion_percentage ?? 0}%
+                    </span>
+                    <span
+                      className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                        detailModalRow.completion_percentage === 100
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : (detailModalRow.completion_percentage ?? 0) >= 60
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}
                     >
-                      {selectedSemester === 2 ? 'Isi smt 2' : 'Edit di Popout Matriks'}
-                    </button>
-                  )
-                )}
-              </div>
+                      {detailModalRow.completion_percentage === 100
+                        ? 'Lengkap (100%)'
+                        : (detailModalRow.completion_percentage ?? 0) >= 60
+                        ? 'Dalam Pengisian'
+                        : 'Belum Lengkap'}
+                    </span>
+                  </div>
+                  <div className="w-36 sm:w-48 h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${
+                        detailModalRow.completion_percentage === 100
+                          ? 'bg-emerald-500'
+                          : 'bg-blue-600'
+                      }`}
+                      style={{ width: `${Math.max(5, detailModalRow.completion_percentage ?? 0)}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Bagian 1: Aktivitas Real Langsung, Tidak Langsung & Penunjang */}
+                <div className="space-y-2">
+                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-500">
+                    1. Rincian Aktivitas Real (Langsung, Tidak Langsung & Penunjang)
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 text-xs">
+                    <div className="p-3.5 rounded-2xl bg-[#F8FAFF] border border-slate-200/80 space-y-2">
+                      <div>
+                        <p className="font-bold text-slate-800 mb-1">
+                          Aktivitas Real Langsung (Semester 1)
+                        </p>
+                        <p className="text-slate-600 leading-relaxed whitespace-pre-line">
+                          {detailModalRow.aktivitas_real_langsung || '-'}
+                        </p>
+                      </div>
+                      {detailModalRow.aktivitas_real_langsung_sem2?.trim() && (
+                        <div className="pt-2 border-t border-indigo-100">
+                          <p className="font-bold text-indigo-800 mb-1">
+                            Aktivitas Real Langsung (Semester 2)
+                          </p>
+                          <p className="text-indigo-950 leading-relaxed whitespace-pre-line">
+                            {detailModalRow.aktivitas_real_langsung_sem2}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="p-3.5 rounded-2xl bg-[#F8FAFF] border border-slate-200/80 space-y-2">
+                      <div>
+                        <p className="font-bold text-slate-800 mb-1">
+                          Aktivitas Real Tidak Langsung (Semester 1)
+                        </p>
+                        <p className="text-slate-600 leading-relaxed whitespace-pre-line">
+                          {detailModalRow.aktivitas_real_tidak_langsung || '-'}
+                        </p>
+                      </div>
+                      {detailModalRow.aktivitas_real_tidak_langsung_sem2?.trim() && (
+                        <div className="pt-2 border-t border-indigo-100">
+                          <p className="font-bold text-indigo-800 mb-1">
+                            Aktivitas Real Tidak Langsung (Semester 2)
+                          </p>
+                          <p className="text-indigo-950 leading-relaxed whitespace-pre-line">
+                            {detailModalRow.aktivitas_real_tidak_langsung_sem2}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="p-3.5 rounded-2xl bg-[#F8FAFF] border border-slate-200/80 space-y-2">
+                      <div>
+                        <p className="font-bold text-slate-800 mb-1">
+                          Aktivitas Real Penunjang (Semester 1)
+                        </p>
+                        <p className="text-slate-600 leading-relaxed whitespace-pre-line">
+                          {detailModalRow.aktivitas_real_penunjang || '-'}
+                        </p>
+                      </div>
+                      {detailModalRow.aktivitas_real_penunjang_sem2?.trim() && (
+                        <div className="pt-2 border-t border-indigo-100">
+                          <p className="font-bold text-indigo-800 mb-1">
+                            Aktivitas Real Penunjang (Semester 2)
+                          </p>
+                          <p className="text-indigo-950 leading-relaxed whitespace-pre-line">
+                            {detailModalRow.aktivitas_real_penunjang_sem2}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bagian 2: Alokasi Anggaran & Karakteristik Sasaran */}
+                <div className="space-y-2">
+                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-500">
+                    2. Alokasi Anggaran, Sumber Pendanaan & Karakteristik Sasaran
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+                    <div className="p-3.5 rounded-xl border border-slate-200 bg-white">
+                      <span className="text-slate-500 block">Alokasi Anggaran Murni (Sem 1)</span>
+                      <strong className="font-mono-tabular text-slate-900 text-sm">
+                        {formatRupiah(detailModalRow.alokasi_anggaran)}
+                      </strong>
+                      {hasAnggaranPerubahan && (
+                        <div className="mt-2 pt-2 border-t border-indigo-100">
+                          <span className="text-[11px] font-semibold text-indigo-700 block">
+                            Alokasi Anggaran Perubahan (Sem 2):
+                          </span>
+                          <strong className="font-mono-tabular text-indigo-900 text-sm">
+                            {formatRupiah(paguPerubahan)}
+                          </strong>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="p-3.5 rounded-xl border border-slate-200 bg-white">
+                      <span className="text-slate-500 block">Sumber Pembiayaan Murni (Sem 1)</span>
+                      <strong className="text-slate-900">{detailModalRow.sumber_pembiayaan || '-'}</strong>
+                      {hasAnggaranPerubahan && detailModalRow.sumber_pembiayaan_perubahan && (
+                        <div className="mt-2 pt-2 border-t border-indigo-100">
+                          <span className="text-[11px] font-semibold text-indigo-700 block">
+                            Sumber Pembiayaan Perubahan (Sem 2):
+                          </span>
+                          <strong className="text-indigo-900">
+                            {detailModalRow.sumber_pembiayaan_perubahan}
+                          </strong>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="p-3.5 rounded-xl border border-slate-200 bg-white">
+                      <span className="text-slate-500 block">Sifat & Lokasi Kegiatan</span>
+                      <strong className="text-slate-900 block">
+                        {detailModalRow.sifat_bantuan || '-'}
+                      </strong>
+                      <span className="text-[11px] text-slate-600 mt-0.5 block">
+                        Lokasi: {detailModalRow.lokasi || '-'}
+                      </span>
+                      {hasKarakteristikSem2 && detailModalRow.lokasi_sem2 && (
+                        <span className="text-[11px] text-indigo-700 font-semibold mt-1 block">
+                          Sem 2: {detailModalRow.sifat_bantuan_sem2 || detailModalRow.sifat_bantuan} ·{' '}
+                          {detailModalRow.lokasi_sem2}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="p-3.5 rounded-xl border border-slate-200 bg-white sm:col-span-2 md:col-span-1">
+                      <span className="text-slate-500 block">Target & Rincian Sasaran</span>
+                      <strong className="text-slate-900 block leading-relaxed">
+                        {detailModalRow.keterangan_sasaran?.trim() ||
+                          `${formatNumber(detailModalRow.jumlah_sasaran)} ${
+                            detailModalRow.satuan_sasaran || 'KPM'
+                          }`}
+                      </strong>
+                      {hasKarakteristikSem2 && detailModalRow.keterangan_sasaran_sem2?.trim() && (
+                        <span className="text-[11px] text-indigo-700 font-semibold mt-1 block">
+                          Sasaran Sem 2: {detailModalRow.keterangan_sasaran_sem2}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="p-3.5 rounded-xl border border-slate-200 bg-white">
+                      <span className="text-slate-500 block">Besaran Manfaat</span>
+                      <strong className="text-slate-900">{detailModalRow.besaran_manfaat || '-'}</strong>
+                      {hasKarakteristikSem2 && detailModalRow.besaran_manfaat_sem2?.trim() && (
+                        <span className="text-[11px] text-indigo-700 font-semibold mt-1 block">
+                          Sem 2: {detailModalRow.besaran_manfaat_sem2}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="p-3.5 rounded-xl border border-slate-200 bg-white">
+                      <span className="text-slate-500 block">Jenis & Durasi Bantuan</span>
+                      <strong className="text-slate-900 block">
+                        {detailModalRow.jenis_bantuan} ({detailModalRow.durasi_pemberian_bantuan})
+                      </strong>
+                      {detailModalRow.keterangan_durasi_bantuan && (
+                        <span className="text-[11px] text-slate-600 mt-0.5 block">
+                          Ket. Durasi: {detailModalRow.keterangan_durasi_bantuan}
+                        </span>
+                      )}
+                      {hasKarakteristikSem2 &&
+                        (detailModalRow.jenis_bantuan_sem2 ||
+                          detailModalRow.durasi_pemberian_bantuan_sem2) && (
+                          <span className="text-[11px] text-indigo-700 font-semibold mt-1 block">
+                            Sem 2: {detailModalRow.jenis_bantuan_sem2 || detailModalRow.jenis_bantuan} (
+                            {detailModalRow.durasi_pemberian_bantuan_sem2 ||
+                              detailModalRow.durasi_pemberian_bantuan}
+                            )
+                          </span>
+                        )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bagian 3: Realisasi Semester 1 & Semester 2 */}
+                <div className="space-y-2">
+                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-500">
+                    3. Realisasi Anggaran Semester 1, Semester 2, Realisasi Final & Sisa Pagu
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                    {/* Kartu Realisasi Semester 1 */}
+                    <div className="p-4 rounded-2xl bg-[#F8FAFF] border border-blue-100 space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-bold text-slate-800">
+                          Realisasi Semester 1 (Jan–Jun {activePeriode.tahun}):{' '}
+                          <span className="font-mono-tabular text-[#1D4ED8]">
+                            {formatRupiah(realisasiS1)} (
+                            {detailModalRow.persentase_realisasi_sem1.toFixed(1)}%)
+                          </span>
+                        </span>
+                        <StatusIndicator status={detailModalRow.sem1.status_verifikasi} />
+                      </div>
+                      <div className="bg-white p-2.5 rounded-xl border border-slate-200/80 text-slate-600">
+                        <strong className="text-slate-800 block mb-0.5">
+                          Rincian Realisasi Semester 1:
+                        </strong>
+                        {detailModalRow.sem1.rincian_realisasi?.trim() || '-'}
+                      </div>
+                      {detailModalRow.sem1.catatan_verifikator && (
+                        <p className="text-slate-600 bg-amber-50/70 p-2.5 rounded-xl border border-amber-200/80">
+                          <strong className="text-amber-900">Catatan Verifikator S1:</strong>{' '}
+                          {detailModalRow.sem1.catatan_verifikator}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Kartu Realisasi Semester 2 */}
+                    <div className="p-4 rounded-2xl bg-[#F8FAFF] border border-indigo-100 space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-bold text-slate-800">
+                          Realisasi Semester 2 (Jul–Des {activePeriode.tahun}):{' '}
+                          <span className="font-mono-tabular text-indigo-700">
+                            {formatRupiah(realisasiS2)} (
+                            {detailModalRow.persentase_realisasi_sem2.toFixed(1)}%)
+                          </span>
+                        </span>
+                        <StatusIndicator status={detailModalRow.sem2.status_verifikasi} />
+                      </div>
+                      <div className="bg-white p-2.5 rounded-xl border border-slate-200/80 text-slate-600">
+                        <strong className="text-slate-800 block mb-0.5">
+                          Rincian Realisasi Semester 2:
+                        </strong>
+                        {detailModalRow.sem2.rincian_realisasi?.trim() || '-'}
+                      </div>
+                      {detailModalRow.sem2.catatan_verifikator && (
+                        <p className="text-slate-600 bg-amber-50/70 p-2.5 rounded-xl border border-amber-200/80">
+                          <strong className="text-amber-900">Catatan Verifikator S2:</strong>{' '}
+                          {detailModalRow.sem2.catatan_verifikator}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Ringkasan Realisasi Final (Sem 1 + Sem 2) & Sisa Pagu Anggaran */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                    <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/90">
+                      <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                        Alokasi Pagu Acuan ({hasAnggaranPerubahan ? 'Perubahan' : 'Murni'})
+                      </span>
+                      <p className="text-sm font-mono-tabular font-extrabold text-slate-900 mt-1">
+                        {formatRupiah(paguAcuan)}
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-2xl bg-indigo-50/80 border border-indigo-200">
+                      <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-indigo-700">
+                        <Sparkles className="w-3 h-3" />
+                        <span>Realisasi Final (Sem 1 + Sem 2)</span>
+                      </span>
+                      <p className="text-sm font-mono-tabular font-extrabold text-indigo-900 mt-1">
+                        {formatRupiah(realisasiFinal)}{' '}
+                        <span className="text-xs font-semibold text-indigo-700">
+                          ({persenFinal.toFixed(1)}%)
+                        </span>
+                      </p>
+                    </div>
+
+                    <div
+                      className={`p-3.5 rounded-2xl border ${
+                        sisaPagu < 0
+                          ? 'bg-rose-50 border-rose-200'
+                          : 'bg-emerald-50/80 border-emerald-200'
+                      }`}
+                    >
+                      <span
+                        className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider ${
+                          sisaPagu < 0 ? 'text-rose-700' : 'text-emerald-800'
+                        }`}
+                      >
+                        <Wallet className="w-3 h-3" />
+                        <span>Sisa Pagu Anggaran</span>
+                      </span>
+                      <p
+                        className={`text-sm font-mono-tabular font-extrabold mt-1 ${
+                          sisaPagu < 0 ? 'text-rose-700' : 'text-emerald-900'
+                        }`}
+                      >
+                        {sisaPagu < 0
+                          ? `- ${formatRupiah(Math.abs(sisaPagu))}`
+                          : formatRupiah(sisaPagu)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setDetailModalRow(null)}
+                    className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer"
+                  >
+                    Tutup Preview
+                  </button>
+                  {userRole === 'OPD' && (
+                    (selectedSemester === 1
+                      ? detailModalRow.sem1.status_verifikasi
+                      : detailModalRow.sem2.status_verifikasi) === 'Terverifikasi' ? (
+                      <div className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl">
+                        <Lock className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Data Terverifikasi & Terkunci</span>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const target = detailModalRow;
+                          setDetailModalRow(null);
+                          onOpenInputModal(target);
+                        }}
+                        className="px-4 py-2 text-xs font-semibold text-white bg-[#2563EB] rounded-xl hover:bg-[#1D4ED8] cursor-pointer"
+                      >
+                        {selectedSemester === 2 ? 'Isi smt 2' : 'Edit di Popout Matriks'}
+                      </button>
+                    )
+                  )}
+                </div>
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
+          );
+        })()}
       </AnimatePresence>
 
       {/* Modal Import Data Excel dengan Format & Template Standar agar Tidak Berantakan */}

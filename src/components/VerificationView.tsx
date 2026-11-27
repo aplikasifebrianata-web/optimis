@@ -14,6 +14,10 @@ import {
   Clock,
   MessageSquareText,
   Calendar,
+  ArrowUpDown,
+  Building2,
+  Sparkles,
+  Wallet,
 } from 'lucide-react';
 import {
   EnrichedMatrixRow,
@@ -63,6 +67,7 @@ export const VerificationView: React.FC<VerificationViewProps> = ({
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [opdFilter, setOpdFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<string>('prioritas_verifikasi');
   const [detailRow, setDetailRow] = useState<EnrichedMatrixRow | null>(null);
 
   // Modal Verifikasi & Keterangan
@@ -76,7 +81,7 @@ export const VerificationView: React.FC<VerificationViewProps> = ({
   const [catatanInput, setCatatanInput] = useState('');
 
   const filteredRows = useMemo(() => {
-    return rows.filter((r) => {
+    const filtered = rows.filter((r) => {
       if (opdFilter !== 'ALL' && r.opd_id !== opdFilter) return false;
       const activeSemObj = selectedSemester === 1 ? r.sem1 : r.sem2;
       if (statusFilter !== 'ALL' && activeSemObj.status_verifikasi !== statusFilter) {
@@ -87,6 +92,7 @@ export const VerificationView: React.FC<VerificationViewProps> = ({
         return (
           r.sub_kegiatan.toLowerCase().includes(q) ||
           r.program.toLowerCase().includes(q) ||
+          r.kegiatan.toLowerCase().includes(q) ||
           r.nama_opd.toLowerCase().includes(q) ||
           r.singkatan_opd.toLowerCase().includes(q) ||
           r.kode.toLowerCase().includes(q)
@@ -94,7 +100,66 @@ export const VerificationView: React.FC<VerificationViewProps> = ({
       }
       return true;
     });
-  }, [rows, opdFilter, statusFilter, selectedSemester, searchQuery]);
+
+    const getStatusPriority = (status: string) => {
+      if (status === 'Menunggu Verifikasi') return 1;
+      if (status === 'Perlu Perbaikan') return 2;
+      if (status === 'Draft') return 3;
+      if (status === 'Terverifikasi') return 4;
+      return 5;
+    };
+
+    const getPaguAcuan = (r: EnrichedMatrixRow) =>
+      (Number(r.alokasi_anggaran_perubahan) || 0) > 0
+        ? Number(r.alokasi_anggaran_perubahan) || 0
+        : Number(r.alokasi_anggaran) || 0;
+
+    const getActiveRealisasi = (r: EnrichedMatrixRow) =>
+      selectedSemester === 1 ? Number(r.sem1.realisasi) || 0 : Number(r.sem2.realisasi) || 0;
+
+    return [...filtered].sort((a, b) => {
+      const semA = selectedSemester === 1 ? a.sem1 : a.sem2;
+      const semB = selectedSemester === 1 ? b.sem1 : b.sem2;
+
+      switch (sortBy) {
+        case 'prioritas_verifikasi':
+          return (
+            getStatusPriority(semA.status_verifikasi) -
+              getStatusPriority(semB.status_verifikasi) ||
+            a.nama_opd.localeCompare(b.nama_opd, 'id') ||
+            a.kode.localeCompare(b.kode, 'id', { numeric: true })
+          );
+        case 'opd_asc':
+          return (
+            a.nama_opd.localeCompare(b.nama_opd, 'id') ||
+            a.kode.localeCompare(b.kode, 'id', { numeric: true })
+          );
+        case 'opd_desc':
+          return (
+            b.nama_opd.localeCompare(a.nama_opd, 'id') ||
+            a.kode.localeCompare(b.kode, 'id', { numeric: true })
+          );
+        case 'kode_asc':
+          return a.kode.localeCompare(b.kode, 'id', { numeric: true });
+        case 'kode_desc':
+          return b.kode.localeCompare(a.kode, 'id', { numeric: true });
+        case 'sub_kegiatan_asc':
+          return a.sub_kegiatan.localeCompare(b.sub_kegiatan, 'id');
+        case 'sub_kegiatan_desc':
+          return b.sub_kegiatan.localeCompare(a.sub_kegiatan, 'id');
+        case 'pagu_desc':
+          return getPaguAcuan(b) - getPaguAcuan(a);
+        case 'pagu_asc':
+          return getPaguAcuan(a) - getPaguAcuan(b);
+        case 'realisasi_desc':
+          return getActiveRealisasi(b) - getActiveRealisasi(a);
+        case 'realisasi_asc':
+          return getActiveRealisasi(a) - getActiveRealisasi(b);
+        default:
+          return 0;
+      }
+    });
+  }, [rows, opdFilter, statusFilter, selectedSemester, searchQuery, sortBy]);
 
   // Statistik Verifikasi sesuai Tahun & Semester yang dipilih di awal
   const counts = useMemo(() => {
@@ -271,8 +336,8 @@ export const VerificationView: React.FC<VerificationViewProps> = ({
         </div>
       </div>
 
-      {/* Filter Bar */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 p-4 grid grid-cols-1 md:grid-cols-3 gap-3 shadow-xs">
+      {/* Filter Bar & Sort By */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 shadow-xs">
         <div className="relative">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
@@ -280,14 +345,14 @@ export const VerificationView: React.FC<VerificationViewProps> = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Cari sub kegiatan, kode rekening, atau OPD..."
-            className="w-full pl-9 pr-3 py-2 text-xs bg-[#F8FAFF] border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:bg-white"
+            className="w-full h-10 pl-9 pr-3 text-xs bg-[#F8FAFF] border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:bg-white"
           />
         </div>
 
         <select
           value={opdFilter}
           onChange={(e) => setOpdFilter(e.target.value)}
-          className="px-3 py-2 text-xs font-medium text-slate-700 bg-[#F8FAFF] border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+          className="h-10 px-3 text-xs font-medium text-slate-700 bg-[#F8FAFF] border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
         >
           <option value="ALL">Semua Perangkat Daerah ({allOpds.length} OPD)</option>
           {allOpds.map((o) => (
@@ -300,7 +365,7 @@ export const VerificationView: React.FC<VerificationViewProps> = ({
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-3 py-2 text-xs font-medium text-slate-700 bg-[#F8FAFF] border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+          className="h-10 px-3 text-xs font-medium text-slate-700 bg-[#F8FAFF] border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
         >
           <option value="ALL">
             Semua Status Verifikasi Semester {selectedSemester}
@@ -311,6 +376,29 @@ export const VerificationView: React.FC<VerificationViewProps> = ({
           <option value="Draft">Draft</option>
           <option value="Belum Diisi">Belum Diisi</option>
         </select>
+
+        {/* Fungsi Sort By pada Menu Verifikasi */}
+        <div className="relative">
+          <ArrowUpDown className="w-3.5 h-3.5 text-[#2563EB] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            aria-label="Sort By Verifikasi"
+            className="w-full h-10 pl-8 pr-3 text-xs font-semibold text-slate-800 bg-[#F8FAFF] border border-blue-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB] cursor-pointer"
+          >
+            <option value="prioritas_verifikasi">Sort By: Prioritas Verifikasi</option>
+            <option value="opd_asc">Sort By: Nama OPD (A – Z)</option>
+            <option value="opd_desc">Sort By: Nama OPD (Z – A)</option>
+            <option value="kode_asc">Sort By: Kode Rekening (Terkecil)</option>
+            <option value="kode_desc">Sort By: Kode Rekening (Terbesar)</option>
+            <option value="sub_kegiatan_asc">Sort By: Sub Kegiatan (A – Z)</option>
+            <option value="sub_kegiatan_desc">Sort By: Sub Kegiatan (Z – A)</option>
+            <option value="pagu_desc">Sort By: Pagu Anggaran (Tertinggi)</option>
+            <option value="pagu_asc">Sort By: Pagu Anggaran (Terendah)</option>
+            <option value="realisasi_desc">Sort By: Realisasi Sem {selectedSemester} (Tertinggi)</option>
+            <option value="realisasi_asc">Sort By: Realisasi Sem {selectedSemester} (Terendah)</option>
+          </select>
+        </div>
       </div>
 
       {/* Daftar Sub Kegiatan & Panel Verifikasi Semester yang Dipilih */}
@@ -343,11 +431,24 @@ export const VerificationView: React.FC<VerificationViewProps> = ({
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3.5 border-b border-slate-100">
                   <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                      <span className="font-bold text-slate-900">{row.singkatan_opd}</span>
+                      <button
+                        type="button"
+                        onClick={() => setDetailRow(row)}
+                        className="font-bold text-slate-900 hover:text-[#2563EB] hover:underline transition-colors cursor-pointer"
+                        title={`Klik Nama OPD (${row.nama_opd}) untuk membuka preview rincian lengkap matriks`}
+                      >
+                        {row.singkatan_opd} ({row.nama_opd})
+                      </button>
                       <span aria-hidden="true">·</span>
-                      <span className="font-mono-tabular font-semibold text-[#2563EB]">
-                        {row.kode}
-                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setDetailRow(row)}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-blue-50 hover:bg-[#2563EB] text-[#2563EB] hover:text-white border border-blue-200/80 font-mono-tabular font-semibold transition-all cursor-pointer"
+                        title={`Klik Kode Rekening (${row.kode}) untuk membuka preview rincian lengkap matriks`}
+                      >
+                        <span>{row.kode}</span>
+                        <Eye className="w-3 h-3" />
+                      </button>
                       <span aria-hidden="true">·</span>
                       <span>{row.strategi}</span>
                     </div>
@@ -751,114 +852,260 @@ export const VerificationView: React.FC<VerificationViewProps> = ({
         )}
       </AnimatePresence>
 
-      {/* Modal Read-Only Rincian Matriks untuk Pemeriksaan Verifikator */}
+      {/* Modal Read-Only Preview Rincian Lengkap Matriks untuk Pemeriksaan Verifikator */}
       <AnimatePresence>
-        {detailRow && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-slate-900/45 backdrop-blur-xs flex items-center justify-center p-4"
-          >
+        {detailRow && (() => {
+          const paguMurni = Number(detailRow.alokasi_anggaran) || 0;
+          const paguPerubahan = Number(detailRow.alokasi_anggaran_perubahan) || 0;
+          const hasAnggaranPerubahan = paguPerubahan > 0;
+          const paguAcuan = hasAnggaranPerubahan ? paguPerubahan : paguMurni;
+          const realisasiS1 = Number(detailRow.sem1.realisasi) || 0;
+          const realisasiS2 = Number(detailRow.sem2.realisasi) || 0;
+          const realisasiFinal = realisasiS1 + realisasiS2;
+          const sisaPagu = paguAcuan - realisasiFinal;
+          const persenFinal = paguAcuan > 0 ? (realisasiFinal / paguAcuan) * 100 : 0;
+
+          return (
             <motion.div
-              initial={{ scale: 0.96, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.96, opacity: 0 }}
-              className="bg-white rounded-3xl border border-slate-200 max-w-3xl w-full max-h-[88vh] overflow-y-auto p-6 space-y-5 shadow-2xl"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setDetailRow(null)}
+              className="fixed inset-0 z-50 bg-slate-900/45 backdrop-blur-xs flex items-center justify-center p-4"
             >
-              <div className="flex items-start justify-between gap-4 pb-4 border-b border-slate-100">
-                <div>
-                  <p className="text-xs font-mono-tabular font-semibold text-[#2563EB]">
-                    {detailRow.kode} · {detailRow.nama_opd}
-                  </p>
-                  <h3 className="text-lg font-bold text-slate-900 mt-0.5">
-                    {detailRow.sub_kegiatan}
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">{detailRow.strategi}</p>
+              <motion.div
+                initial={{ scale: 0.96, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.96, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white rounded-3xl border border-slate-200 max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-2xl"
+              >
+                <div className="flex items-start justify-between gap-4 pb-4 border-b border-slate-100">
+                  <div className="space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-blue-50 text-[#1D4ED8] border border-blue-200 font-mono-tabular font-bold text-xs">
+                        {detailRow.kode}
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 font-bold text-xs">
+                        <Building2 className="w-3.5 h-3.5 text-[#2563EB]" />
+                        <span>
+                          {detailRow.singkatan_opd} — {detailRow.nama_opd}
+                        </span>
+                      </span>
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-900">
+                      {detailRow.sub_kegiatan}
+                    </h3>
+                    <div className="text-xs text-slate-600 space-y-0.5">
+                      <p>
+                        <strong>Strategi OPPKPKE:</strong>{' '}
+                        <span className="text-[#2563EB] font-semibold">{detailRow.strategi}</span>
+                      </p>
+                      <p>
+                        <strong>Program:</strong> {detailRow.program || '-'}
+                      </p>
+                      <p>
+                        <strong>Kegiatan:</strong> {detailRow.kegiatan || '-'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDetailRow(null)}
+                    className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setDetailRow(null)}
-                  className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                <div className="p-3.5 rounded-2xl bg-[#F8FAFF] border border-slate-200/70">
-                  <p className="font-semibold text-slate-800 mb-1">Aktivitas Real Langsung</p>
-                  <p className="text-slate-600 leading-relaxed">
-                    {detailRow.aktivitas_real_langsung || '-'}
-                  </p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                  <div className="p-3.5 rounded-2xl bg-[#F8FAFF] border border-slate-200/70 space-y-2">
+                    <div>
+                      <p className="font-semibold text-slate-800 mb-1">
+                        Aktivitas Real Langsung (Sem 1)
+                      </p>
+                      <p className="text-slate-600 leading-relaxed">
+                        {detailRow.aktivitas_real_langsung || '-'}
+                      </p>
+                    </div>
+                    {detailRow.aktivitas_real_langsung_sem2?.trim() && (
+                      <div className="pt-2 border-t border-indigo-100">
+                        <p className="font-semibold text-indigo-800 mb-1">
+                          Aktivitas Real Langsung (Sem 2)
+                        </p>
+                        <p className="text-indigo-950 leading-relaxed">
+                          {detailRow.aktivitas_real_langsung_sem2}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-3.5 rounded-2xl bg-[#F8FAFF] border border-slate-200/70 space-y-2">
+                    <div>
+                      <p className="font-semibold text-slate-800 mb-1">
+                        Aktivitas Real Tidak Langsung (Sem 1)
+                      </p>
+                      <p className="text-slate-600 leading-relaxed">
+                        {detailRow.aktivitas_real_tidak_langsung || '-'}
+                      </p>
+                    </div>
+                    {detailRow.aktivitas_real_tidak_langsung_sem2?.trim() && (
+                      <div className="pt-2 border-t border-indigo-100">
+                        <p className="font-semibold text-indigo-800 mb-1">
+                          Aktivitas Real Tidak Langsung (Sem 2)
+                        </p>
+                        <p className="text-indigo-950 leading-relaxed">
+                          {detailRow.aktivitas_real_tidak_langsung_sem2}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-3.5 rounded-2xl bg-[#F8FAFF] border border-slate-200/70 space-y-2">
+                    <div>
+                      <p className="font-semibold text-slate-800 mb-1">
+                        Aktivitas Real Penunjang (Sem 1)
+                      </p>
+                      <p className="text-slate-600 leading-relaxed">
+                        {detailRow.aktivitas_real_penunjang || '-'}
+                      </p>
+                    </div>
+                    {detailRow.aktivitas_real_penunjang_sem2?.trim() && (
+                      <div className="pt-2 border-t border-indigo-100">
+                        <p className="font-semibold text-indigo-800 mb-1">
+                          Aktivitas Real Penunjang (Sem 2)
+                        </p>
+                        <p className="text-indigo-950 leading-relaxed">
+                          {detailRow.aktivitas_real_penunjang_sem2}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="p-3.5 rounded-2xl bg-[#F8FAFF] border border-slate-200/70">
-                  <p className="font-semibold text-slate-800 mb-1">
-                    Aktivitas Real Tidak Langsung
-                  </p>
-                  <p className="text-slate-600 leading-relaxed">
-                    {detailRow.aktivitas_real_tidak_langsung || '-'}
-                  </p>
-                </div>
-                <div className="p-3.5 rounded-2xl bg-[#F8FAFF] border border-slate-200/70">
-                  <p className="font-semibold text-slate-800 mb-1">Aktivitas Real Penunjang</p>
-                  <p className="text-slate-600 leading-relaxed">
-                    {detailRow.aktivitas_real_penunjang || '-'}
-                  </p>
-                </div>
-              </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
-                <div className="p-3 rounded-xl border border-slate-200">
-                  <span className="text-slate-500 block">Alokasi Anggaran</span>
-                  <strong className="font-mono-tabular text-slate-900 text-sm">
-                    {formatRupiah(detailRow.alokasi_anggaran)}
-                  </strong>
-                </div>
-                <div className="p-3 rounded-xl border border-slate-200">
-                  <span className="text-slate-500 block">Sumber Pembiayaan</span>
-                  <strong className="text-slate-900">{detailRow.sumber_pembiayaan}</strong>
-                </div>
-                <div className="p-3 rounded-xl border border-slate-200">
-                  <span className="text-slate-500 block">Sifat Bantuan</span>
-                  <strong className="text-slate-900">{detailRow.sifat_bantuan || '-'}</strong>
-                </div>
-                <div className="p-3 rounded-xl border border-slate-200">
-                  <span className="text-slate-500 block">Jumlah & Satuan Sasaran</span>
-                  <strong className="font-mono-tabular text-slate-900">
-                    {formatNumber(detailRow.jumlah_sasaran)}{' '}
-                    {detailRow.satuan_sasaran || 'KPM'}
-                  </strong>
-                  {detailRow.keterangan_sasaran && (
-                    <span className="block text-[11px] text-slate-500 mt-0.5">
-                      {detailRow.keterangan_sasaran}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+                  <div className="p-3 rounded-xl border border-slate-200">
+                    <span className="text-slate-500 block">Alokasi Anggaran Murni</span>
+                    <strong className="font-mono-tabular text-slate-900 text-sm">
+                      {formatRupiah(detailRow.alokasi_anggaran)}
+                    </strong>
+                    {hasAnggaranPerubahan && (
+                      <div className="mt-1.5 pt-1.5 border-t border-indigo-100">
+                        <span className="text-[11px] font-semibold text-indigo-700 block">
+                          Alokasi Anggaran Perubahan:
+                        </span>
+                        <strong className="font-mono-tabular text-indigo-900 text-sm">
+                          {formatRupiah(paguPerubahan)}
+                        </strong>
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-3 rounded-xl border border-slate-200">
+                    <span className="text-slate-500 block">Sumber Pembiayaan</span>
+                    <strong className="text-slate-900">{detailRow.sumber_pembiayaan}</strong>
+                    {hasAnggaranPerubahan && detailRow.sumber_pembiayaan_perubahan && (
+                      <div className="mt-1.5 pt-1.5 border-t border-indigo-100">
+                        <span className="text-[11px] font-semibold text-indigo-700 block">
+                          Sumber Pembiayaan Perubahan:
+                        </span>
+                        <strong className="text-indigo-900">
+                          {detailRow.sumber_pembiayaan_perubahan}
+                        </strong>
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-3 rounded-xl border border-slate-200">
+                    <span className="text-slate-500 block">Sifat & Lokasi Kegiatan</span>
+                    <strong className="text-slate-900 block">
+                      {detailRow.sifat_bantuan || '-'}
+                    </strong>
+                    <span className="text-[11px] text-slate-600 mt-0.5 block">
+                      Lokasi: {detailRow.lokasi || '-'}
                     </span>
-                  )}
+                  </div>
+                  <div className="p-3 rounded-xl border border-slate-200">
+                    <span className="text-slate-500 block">Target & Rincian Sasaran</span>
+                    <strong className="font-mono-tabular text-slate-900">
+                      {detailRow.keterangan_sasaran?.trim() ||
+                        `${formatNumber(detailRow.jumlah_sasaran)} ${
+                          detailRow.satuan_sasaran || 'KPM'
+                        }`}
+                    </strong>
+                  </div>
+                  <div className="p-3 rounded-xl border border-slate-200">
+                    <span className="text-slate-500 block">Besaran Manfaat</span>
+                    <strong className="text-slate-900">{detailRow.besaran_manfaat || '-'}</strong>
+                  </div>
+                  <div className="p-3 rounded-xl border border-slate-200">
+                    <span className="text-slate-500 block">Jenis & Durasi</span>
+                    <strong className="text-slate-900">
+                      {detailRow.jenis_bantuan} ({detailRow.durasi_pemberian_bantuan})
+                    </strong>
+                  </div>
                 </div>
-                <div className="p-3 rounded-xl border border-slate-200">
-                  <span className="text-slate-500 block">Besaran Manfaat</span>
-                  <strong className="text-slate-900">{detailRow.besaran_manfaat || '-'}</strong>
-                </div>
-                <div className="p-3 rounded-xl border border-slate-200">
-                  <span className="text-slate-500 block">Jenis & Durasi</span>
-                  <strong className="text-slate-900">
-                    {detailRow.jenis_bantuan} ({detailRow.durasi_pemberian_bantuan})
-                  </strong>
-                </div>
-              </div>
 
-              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setDetailRow(null)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer"
-                >
-                  Tutup Rincian
-                </button>
-              </div>
+                {/* Realisasi Semester 1, Semester 2, Realisasi Final & Sisa Pagu */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="p-3.5 rounded-2xl bg-[#F8FAFF] border border-blue-100">
+                    <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      Realisasi Semester 1 & 2
+                    </span>
+                    <p className="text-xs font-mono-tabular font-bold text-[#2563EB] mt-1">
+                      S1: {formatRupiah(realisasiS1)}
+                    </p>
+                    <p className="text-xs font-mono-tabular font-bold text-indigo-700 mt-0.5">
+                      S2: {formatRupiah(realisasiS2)}
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-indigo-50/80 border border-indigo-200">
+                    <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-indigo-700">
+                      <Sparkles className="w-3 h-3" />
+                      <span>Realisasi Final (Sem 1 + Sem 2)</span>
+                    </span>
+                    <p className="text-sm font-mono-tabular font-extrabold text-indigo-900 mt-1">
+                      {formatRupiah(realisasiFinal)} ({persenFinal.toFixed(1)}%)
+                    </p>
+                  </div>
+
+                  <div
+                    className={`p-3.5 rounded-2xl border ${
+                      sisaPagu < 0
+                        ? 'bg-rose-50 border-rose-200'
+                        : 'bg-emerald-50/80 border-emerald-200'
+                    }`}
+                  >
+                    <span
+                      className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider ${
+                        sisaPagu < 0 ? 'text-rose-700' : 'text-emerald-800'
+                      }`}
+                    >
+                      <Wallet className="w-3 h-3" />
+                      <span>Sisa Pagu Anggaran</span>
+                    </span>
+                    <p
+                      className={`text-sm font-mono-tabular font-extrabold mt-1 ${
+                        sisaPagu < 0 ? 'text-rose-700' : 'text-emerald-900'
+                      }`}
+                    >
+                      {sisaPagu < 0
+                        ? `- ${formatRupiah(Math.abs(sisaPagu))}`
+                        : formatRupiah(sisaPagu)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setDetailRow(null)}
+                    className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer"
+                  >
+                    Tutup Preview
+                  </button>
+                </div>
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
+          );
+        })()}
       </AnimatePresence>
     </motion.div>
   );

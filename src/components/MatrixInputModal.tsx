@@ -113,7 +113,7 @@ interface MatrixInputModalProps {
       rincian_realisasi?: string;
       action: 'draft' | 'submit';
     };
-  }) => void;
+  }) => boolean | void;
 }
 
 const DURASI_SATUAN_LIST = [
@@ -246,10 +246,12 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
 
   const durasiBantuanSem2 = `${Math.max(1, durasiAngkaSem2 || 1)} ${durasiSatuanSem2}`;
 
-  // Langkah 4: Realisasi & Rincian Realisasi Semester 1 & Semester 2
+  // Langkah 4: Realisasi & Rincian Realisasi Semester 1 & Semester 2 (diperbolehkan mengisi "0")
   const [realisasiSem1, setRealisasiSem1] = useState<number>(0);
+  const [realisasiSem1Touched, setRealisasiSem1Touched] = useState<boolean>(false);
   const [rincianRealisasiSem1, setRincianRealisasiSem1] = useState<string>('');
   const [realisasiSem2, setRealisasiSem2] = useState<number>(0);
+  const [realisasiSem2Touched, setRealisasiSem2Touched] = useState<boolean>(false);
   const [rincianRealisasiSem2, setRincianRealisasiSem2] = useState<string>('');
 
   // Kunci sesi form aktif agar refresh real-time dari akun lain TIDAK PERNAH me-reset step atau input yang sedang diketik
@@ -363,8 +365,18 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
             setDurasiSatuanSem2(parsed.durasiSatuanSem2 || 'tahun');
             setKeteranganDurasiBantuanSem2(parsed.keteranganDurasiBantuanSem2 ?? '');
             setRealisasiSem1(Number(parsed.realisasiSem1) || 0);
+            setRealisasiSem1Touched(
+              parsed.realisasiSem1Touched !== undefined
+                ? Boolean(parsed.realisasiSem1Touched)
+                : Number(parsed.realisasiSem1) > 0
+            );
             setRincianRealisasiSem1(parsed.rincianRealisasiSem1 ?? '');
             setRealisasiSem2(Number(parsed.realisasiSem2) || 0);
+            setRealisasiSem2Touched(
+              parsed.realisasiSem2Touched !== undefined
+                ? Boolean(parsed.realisasiSem2Touched)
+                : Number(parsed.realisasiSem2) > 0
+            );
             setRincianRealisasiSem2(parsed.rincianRealisasiSem2 ?? '');
             restoredFromDraft = true;
           }
@@ -480,8 +492,14 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
         setKeteranganDurasiBantuanSem2(initialRow.keterangan_durasi_bantuan_sem2 || '');
 
         setRealisasiSem1(initialRow.sem1.realisasi || 0);
+        setRealisasiSem1Touched(
+          initialRow.sem1.realisasi > 0 || initialRow.sem1.status_verifikasi !== 'Belum Diisi'
+        );
         setRincianRealisasiSem1(initialRow.sem1.rincian_realisasi || '');
         setRealisasiSem2(initialRow.sem2.realisasi || 0);
+        setRealisasiSem2Touched(
+          initialRow.sem2.realisasi > 0 || initialRow.sem2.status_verifikasi !== 'Belum Diisi'
+        );
         setRincianRealisasiSem2(initialRow.sem2.rincian_realisasi || '');
       } else {
         // Default untuk Tambah Baris Baru oleh Instansi (OPD) atau Admin
@@ -533,8 +551,10 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
         setDurasiSatuanSem2('tahun');
         setKeteranganDurasiBantuanSem2('');
         setRealisasiSem1(0);
+        setRealisasiSem1Touched(true);
         setRincianRealisasiSem1('');
         setRealisasiSem2(0);
+        setRealisasiSem2Touched(true);
         setRincianRealisasiSem2('');
       }
     }
@@ -619,8 +639,10 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
           durasiSatuanSem2,
           keteranganDurasiBantuanSem2,
           realisasiSem1,
+          realisasiSem1Touched,
           rincianRealisasiSem1,
           realisasiSem2,
+          realisasiSem2Touched,
           rincianRealisasiSem2,
         })
       );
@@ -673,8 +695,10 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
     durasiSatuanSem2,
     keteranganDurasiBantuanSem2,
     realisasiSem1,
+    realisasiSem1Touched,
     rincianRealisasiSem1,
     realisasiSem2,
+    realisasiSem2Touched,
     rincianRealisasiSem2,
   ]);
 
@@ -995,10 +1019,63 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
     setKeteranganDurasiBantuanSem2(row.keterangan_durasi_bantuan_sem2 || '');
 
     setRealisasiSem1(row.sem1.realisasi || 0);
+    setRealisasiSem1Touched(
+      row.sem1.realisasi > 0 || row.sem1.status_verifikasi !== 'Belum Diisi'
+    );
     setRincianRealisasiSem1(row.sem1.rincian_realisasi || '');
     setRealisasiSem2(row.sem2.realisasi || 0);
+    setRealisasiSem2Touched(
+      row.sem2.realisasi > 0 || row.sem2.status_verifikasi !== 'Belum Diisi'
+    );
     setRincianRealisasiSem2(row.sem2.rincian_realisasi || '');
   }, []);
+
+  const handleResetToNewSem2Input = () => {
+    setMatchedSem1Row(null);
+    setKodeProgram('');
+    setProgram('');
+    setKodeKegiatan('');
+    setKegiatan('');
+    setSubKegiatan('');
+    setKodeRekening('');
+    setAktivitasLangsung('');
+    setAktivitasTidakLangsung('');
+    setAktivitasPenunjang('');
+    setAktivitasLangsungSem2('');
+    setAktivitasTidakLangsungSem2('');
+    setAktivitasPenunjangSem2('');
+    setAlokasiAnggaran(0);
+    setSelectedSumberList(['APBD Kabupaten']);
+    setCustomSumberInput('');
+    setShowAnggaranPerubahan(false);
+    setAlokasiAnggaranPerubahan(0);
+    setSelectedSumberPerubahanList(['APBDP Kabupaten']);
+    setCustomSumberPerubahanInput('');
+    setSifatBantuan('Berkelanjutan');
+    setLokasiKegiatan('Kabupaten Blora');
+    setDeskripsiSasaran('');
+    setBesaranManfaat('');
+    setJenisBantuan('Bantuan sosial');
+    setCustomJenisBantuan('');
+    setDurasiAngka(1);
+    setDurasiSatuan('tahun');
+    setKeteranganDurasiBantuan('');
+    setSifatBantuanSem2('Berkelanjutan');
+    setLokasiKegiatanSem2('');
+    setDeskripsiSasaranSem2('');
+    setBesaranManfaatSem2('');
+    setJenisBantuanSem2('Bantuan sosial');
+    setCustomJenisBantuanSem2('');
+    setDurasiAngkaSem2(1);
+    setDurasiSatuanSem2('tahun');
+    setKeteranganDurasiBantuanSem2('');
+    setRealisasiSem1(0);
+    setRealisasiSem1Touched(true);
+    setRincianRealisasiSem1('');
+    setRealisasiSem2(0);
+    setRealisasiSem2Touched(true);
+    setRincianRealisasiSem2('');
+  };
 
   const handlePullSem1ActivitiesToSem2 = () => {
     setAktivitasLangsungSem2(aktivitasLangsung);
@@ -1043,8 +1120,10 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
     userRole === 'OPD' && effectiveRow?.sem2.status_verifikasi === 'Terverifikasi';
   const isActiveSemesterLocked = selectedSemester === 1 ? isSem1Locked : isSem2Locked;
 
-  // Pada pengisian Semester 2, Katalog Nomenklatur SIPD dikunci sesuai Semester 1
-  const isSipdCatalogLocked = selectedSemester === 2;
+  // Pada pengisian Semester 2:
+  // - Jika sedang mengedit baris yang sudah diinput di Semester 1 (effectiveRow !== null), Katalog SIPD dikunci sesuai Semester 1.
+  // - Jika menambah baris baru di Semester 2 (effectiveRow === null), OPD diperbolehkan memilih kode program, kegiatan, dan sub kegiatan baru yang belum diisikan di Semester 1.
+  const isSipdCatalogLocked = selectedSemester === 2 && Boolean(effectiveRow);
 
   // Pada pengisian Semester 2, Alokasi Anggaran & Sumber Pendanaan Semester 1 terkunci apabila Semester 1 sudah Terverifikasi Admin
   const isSem1BudgetLocked = selectedSemester === 2 && Boolean(isSem1Verified);
@@ -1055,10 +1134,56 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
       : alokasiAnggaran;
 
   const activeSemRealisasi = selectedSemester === 1 ? realisasiSem1 : realisasiSem2;
+  const isRealisasiSem1Filled =
+    realisasiSem1 >= 0 &&
+    (realisasiSem1Touched ||
+      realisasiSem1 > 0 ||
+      (effectiveRow ? effectiveRow.sem1.status_verifikasi !== 'Belum Diisi' : false));
+  const isRealisasiSem2Filled =
+    realisasiSem2 >= 0 &&
+    (realisasiSem2Touched ||
+      realisasiSem2 > 0 ||
+      (effectiveRow ? effectiveRow.sem2.status_verifikasi !== 'Belum Diisi' : false));
+
+  // Deteksi Duplikat Kode Program / Kegiatan / Sub Kegiatan pada Instansi & Periode yang sama (Semester 1 maupun Semester 2)
+  const duplicateRowMatch = useMemo(() => {
+    const cleanKode = kodeRekening.trim().toLowerCase();
+    const cleanSub = subKegiatan.trim().toLowerCase();
+    const cleanKeg = kegiatan.trim().toLowerCase();
+    const cleanProg = program.trim().toLowerCase();
+    if (!cleanKode && !cleanSub) return null;
+
+    return (
+      opdExistingSem1Rows.find((r) => {
+        if (effectiveRow && r.matrix_id === effectiveRow.matrix_id) return false;
+        const rKode = (r.kode || '').trim().toLowerCase();
+        const rSub = (r.sub_kegiatan || '').trim().toLowerCase();
+        const rKeg = (r.kegiatan || '').trim().toLowerCase();
+        const rProg = (r.program || '').trim().toLowerCase();
+
+        const isSameKode =
+          Boolean(cleanKode && rKode) &&
+          cleanKode !== '1.00.01.2.01.0001' &&
+          cleanKode === rKode;
+        const isSameHierarchy =
+          Boolean(cleanSub && rSub) &&
+          cleanSub === rSub &&
+          (!cleanKeg || !rKeg || cleanKeg === rKeg) &&
+          (!cleanProg || !rProg || cleanProg === rProg);
+
+        return isSameKode || isSameHierarchy;
+      }) || null
+    );
+  }, [opdExistingSem1Rows, effectiveRow, kodeRekening, subKegiatan, kegiatan, program]);
 
   // Indikator Kelengkapan Tiap Langkah
   const step1Done = Boolean(
-    strategi && kodeRekening.trim() && program.trim() && kegiatan.trim() && subKegiatan.trim()
+    strategi &&
+      kodeRekening.trim() &&
+      program.trim() &&
+      kegiatan.trim() &&
+      subKegiatan.trim() &&
+      !duplicateRowMatch
   );
   // Pengisian aktivitas real cukup mengisi salah satu (Langsung, Tidak Langsung, atau Penunjang)
   const hasSem1Aktivitas = Boolean(
@@ -1073,7 +1198,11 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
   );
   const hasAktivitas = selectedSemester === 2 ? hasSem2Aktivitas || hasSem1Aktivitas : hasSem1Aktivitas;
 
-  const step2Done = Boolean(hasAktivitas && alokasiAnggaran > 0 && selectedSumberList.length > 0);
+  const step2Done = Boolean(
+    hasAktivitas &&
+      (alokasiAnggaran > 0 || (selectedSemester === 2 && alokasiAnggaranPerubahan > 0)) &&
+      selectedSumberList.length > 0
+  );
   const step3Sem1Done = Boolean(
     sifatBantuan &&
       lokasiKegiatan.trim() &&
@@ -1092,17 +1221,17 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
   );
   const step3Done = selectedSemester === 2 ? step3Sem2Done || step3Sem1Done : step3Sem1Done;
   const step4Done = Boolean(
-    selectedSemester === 1 ? realisasiSem1 > 0 : realisasiSem1 > 0 || realisasiSem2 > 0
+    selectedSemester === 1 ? isRealisasiSem1Filled : isRealisasiSem1Filled && isRealisasiSem2Filled
   );
 
   // Progres Bar Kelengkapan Pengisian Matriks (0 - 100%)
   const modalProgressPercent = useMemo(() => {
     let score = 0;
     const maxScore = 8;
-    if (kodeRekening.trim() && subKegiatan.trim()) score += 1;
+    if (kodeRekening.trim() && subKegiatan.trim() && !duplicateRowMatch) score += 1;
     if (program.trim() && kegiatan.trim()) score += 1;
     if (hasAktivitas) score += 1;
-    if (alokasiAnggaran > 0) score += 1;
+    if (alokasiAnggaran > 0 || (selectedSemester === 2 && alokasiAnggaranPerubahan > 0)) score += 1;
     if (selectedSumberList.length > 0) score += 1;
     if (
       selectedSemester === 2
@@ -1120,15 +1249,23 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
     ) {
       score += 1;
     }
-    if (activeSemRealisasi > 0) score += 1;
+    if (
+      selectedSemester === 1
+        ? isRealisasiSem1Filled
+        : isRealisasiSem2Filled || activeSemRealisasi >= 0
+    ) {
+      score += 1;
+    }
     return Math.round((score / maxScore) * 100);
   }, [
     kodeRekening,
     subKegiatan,
+    duplicateRowMatch,
     program,
     kegiatan,
     hasAktivitas,
     alokasiAnggaran,
+    alokasiAnggaranPerubahan,
     selectedSumberList,
     selectedSemester,
     deskripsiSasaran,
@@ -1139,6 +1276,8 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
     besaranManfaatSem2,
     finalJenisBantuan,
     finalJenisBantuanSem2,
+    isRealisasiSem1Filled,
+    isRealisasiSem2Filled,
     activeSemRealisasi,
   ]);
 
@@ -1171,11 +1310,11 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
       title:
         selectedSemester === 1
           ? 'Realisasi Semester 1'
-          : 'Realisasi Sem 1 & Final',
+          : 'Realisasi Sem 1 & Sem 2',
       subtitle:
         selectedSemester === 1
           ? 'Periode Januari – Juni'
-          : 'Sem 1 & Akumulasi/Final',
+          : 'Sem 1, Sem 2 & Realisasi Final',
       icon: <CalendarRange className="w-4 h-4" />,
       done: step4Done,
     },
@@ -1210,7 +1349,11 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
     const hasValidPerubahan =
       selectedSemester === 2 && showAnggaranPerubahan && alokasiAnggaranPerubahan > 0;
 
-    onSave({
+    // Jika di Semester 2 menambah sub kegiatan baru (effectiveRow === null),
+    // salin aktivitas & karakteristik Semester 2 ke baseline utama bila field Semester 1 belum diisi
+    const isNewRowInSem2 = selectedSemester === 2 && !effectiveRow;
+
+    const saveResult = onSave({
       matrix_id: effectiveRow ? effectiveRow.matrix_id : null,
       periode_id: activePeriode.periode_id,
       opd_id: userRole === 'ADMIN' ? selectedOpdId : activeOpd.opd_id,
@@ -1235,14 +1378,20 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
         aktivitas_real_langsung:
           selectedSemester === 2 && effectiveRow
             ? effectiveRow.aktivitas_real_langsung
+            : isNewRowInSem2 && !aktivitasLangsung.trim()
+            ? aktivitasLangsungSem2
             : aktivitasLangsung,
         aktivitas_real_tidak_langsung:
           selectedSemester === 2 && effectiveRow
             ? effectiveRow.aktivitas_real_tidak_langsung
+            : isNewRowInSem2 && !aktivitasTidakLangsung.trim()
+            ? aktivitasTidakLangsungSem2
             : aktivitasTidakLangsung,
         aktivitas_real_penunjang:
           selectedSemester === 2 && effectiveRow
             ? effectiveRow.aktivitas_real_penunjang
+            : isNewRowInSem2 && !aktivitasPenunjang.trim()
+            ? aktivitasPenunjangSem2
             : aktivitasPenunjang,
         aktivitas_real_langsung_sem2:
           selectedSemester === 2
@@ -1256,9 +1405,18 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
           selectedSemester === 2
             ? aktivitasPenunjangSem2
             : effectiveRow?.aktivitas_real_penunjang_sem2 || '',
-        alokasi_anggaran: isSem1BudgetLocked && effectiveRow ? effectiveRow.alokasi_anggaran : alokasiAnggaran,
+        alokasi_anggaran:
+          isSem1BudgetLocked && effectiveRow
+            ? effectiveRow.alokasi_anggaran
+            : isNewRowInSem2 && alokasiAnggaran === 0 && hasValidPerubahan
+            ? alokasiAnggaranPerubahan
+            : alokasiAnggaran,
         sumber_pembiayaan:
-          isSem1BudgetLocked && effectiveRow ? effectiveRow.sumber_pembiayaan : finalSumberPembiayaan,
+          isSem1BudgetLocked && effectiveRow
+            ? effectiveRow.sumber_pembiayaan
+            : isNewRowInSem2 && hasValidPerubahan
+            ? finalSumberPembiayaanPerubahan
+            : finalSumberPembiayaan,
         alokasi_anggaran_perubahan:
           selectedSemester === 2
             ? hasValidPerubahan
@@ -1274,14 +1432,20 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
         sifat_bantuan:
           selectedSemester === 2 && effectiveRow
             ? effectiveRow.sifat_bantuan
+            : isNewRowInSem2
+            ? sifatBantuanSem2
             : sifatBantuan,
         lokasi:
           selectedSemester === 2 && effectiveRow
             ? effectiveRow.lokasi
+            : isNewRowInSem2 && cleanLokasiSem2
+            ? cleanLokasiSem2
             : cleanLokasi,
         lokasi_kecamatan:
           selectedSemester === 2 && effectiveRow
             ? effectiveRow.lokasi_kecamatan || effectiveRow.lokasi
+            : isNewRowInSem2 && cleanLokasiSem2
+            ? cleanLokasiSem2
             : cleanLokasi,
         lokasi_desa:
           selectedSemester === 2 && effectiveRow
@@ -1290,31 +1454,45 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
         lokasi_spesifik:
           selectedSemester === 2 && effectiveRow
             ? effectiveRow.lokasi_spesifik || effectiveRow.lokasi
+            : isNewRowInSem2 && cleanLokasiSem2
+            ? cleanLokasiSem2
             : cleanLokasi,
         jumlah_sasaran:
           selectedSemester === 2 && effectiveRow
             ? effectiveRow.jumlah_sasaran
+            : isNewRowInSem2 && numericSasaranSem2 > 0
+            ? numericSasaranSem2
             : numericSasaran,
         satuan_sasaran: effectiveRow?.satuan_sasaran || 'KPM',
         keterangan_sasaran:
           selectedSemester === 2 && effectiveRow
             ? effectiveRow.keterangan_sasaran || ''
+            : isNewRowInSem2 && cleanDeskripsiSasaranSem2
+            ? cleanDeskripsiSasaranSem2
             : cleanDeskripsiSasaran,
         besaran_manfaat:
           selectedSemester === 2 && effectiveRow
             ? effectiveRow.besaran_manfaat
+            : isNewRowInSem2 && besaranManfaatSem2.trim()
+            ? besaranManfaatSem2.trim()
             : besaranManfaat,
         jenis_bantuan:
           selectedSemester === 2 && effectiveRow
             ? effectiveRow.jenis_bantuan
+            : isNewRowInSem2 && finalJenisBantuanSem2
+            ? finalJenisBantuanSem2
             : finalJenisBantuan,
         durasi_pemberian_bantuan:
           selectedSemester === 2 && effectiveRow
             ? effectiveRow.durasi_pemberian_bantuan
+            : isNewRowInSem2 && durasiBantuanSem2
+            ? durasiBantuanSem2
             : durasiBantuan,
         keterangan_durasi_bantuan:
           selectedSemester === 2 && effectiveRow
             ? effectiveRow.keterangan_durasi_bantuan || ''
+            : isNewRowInSem2 && keteranganDurasiBantuanSem2.trim()
+            ? keteranganDurasiBantuanSem2.trim()
             : keteranganDurasiBantuan.trim(),
         sifat_bantuan_sem2:
           selectedSemester === 2
@@ -1353,7 +1531,7 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
       sem1Input:
         !isSem1Locked && sem1Action !== 'none'
           ? {
-              realisasi: realisasiSem1,
+              realisasi: Math.max(0, Number(realisasiSem1) || 0),
               rincian_realisasi: rincianRealisasiSem1.trim(),
               action: sem1Action,
             }
@@ -1361,12 +1539,16 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
       sem2Input:
         !isSem2Locked && sem2Action !== 'none'
           ? {
-              realisasi: realisasiSem2,
+              realisasi: Math.max(0, Number(realisasiSem2) || 0),
               rincian_realisasi: rincianRealisasiSem2.trim(),
               action: sem2Action,
             }
           : undefined,
     });
+
+    if (saveResult === false) {
+      return;
+    }
 
     clearModalDraft();
 
@@ -1561,25 +1743,40 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                     </div>
 
                     {/* Panduan & Pemilih Cepat Data Semester 1 saat Mode Semester 2 */}
-                    {selectedSemester === 2 && opdExistingSem1Rows.length > 0 && (
+                    {selectedSemester === 2 && !initialRow && opdExistingSem1Rows.length > 0 && (
                       <div className="p-4 rounded-2xl bg-indigo-50/80 border border-indigo-200/90 space-y-2.5">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="flex items-center gap-2">
                             <CalendarRange className="w-4 h-4 text-indigo-700 shrink-0" />
                             <span className="text-xs font-extrabold text-indigo-950">
-                              Pengisian Semester 2: Edit Data Sub Kegiatan & Nama Kegiatan dari Semester 1
+                              Pengisian Semester 2: Input Sub Kegiatan Baru atau Lanjutkan dari Semester 1
                             </span>
                           </div>
-                          <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
-                            {opdExistingSem1Rows.length} Sub Kegiatan Semester 1 Tersedia
-                          </span>
+                          <div className="flex items-center gap-2">
+                            {matchedSem1Row && (
+                              <button
+                                type="button"
+                                onClick={handleResetToNewSem2Input}
+                                className="px-2.5 py-1 rounded-lg bg-white hover:bg-indigo-100 text-indigo-700 border border-indigo-300 text-[11px] font-bold transition-colors cursor-pointer"
+                              >
+                                + Input Sub Kegiatan Baru (Semester 2)
+                              </button>
+                            )}
+                            <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
+                              {opdExistingSem1Rows.length} Sub Kegiatan Sudah Terinput
+                            </span>
+                          </div>
                         </div>
                         <p className="text-xs text-indigo-900/80 leading-relaxed">
-                          Pilih Sub Kegiatan & Nama Kegiatan yang sudah diinput pada Semester 1 di bawah ini untuk melanjutkan pengisian Semester 2:
+                          Anda dapat langsung memilih <strong>Kode Program, Kegiatan, dan Sub Kegiatan baru</strong> di bawah yang belum diisikan pada Semester 1, atau pilih dari daftar Semester 1 berikut untuk mengeditnya:
                         </p>
                         <select
                           value={effectiveRow?.matrix_id || ''}
                           onChange={(e) => {
+                            if (!e.target.value) {
+                              handleResetToNewSem2Input();
+                              return;
+                            }
                             const picked = opdExistingSem1Rows.find(
                               (r) => r.matrix_id === e.target.value
                             );
@@ -1590,11 +1787,11 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                           className="w-full px-3.5 py-2.5 text-xs font-bold text-slate-900 bg-white border border-indigo-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-600 cursor-pointer"
                         >
                           <option value="">
-                            -- Pilih Sub Kegiatan & Kegiatan yang Sudah Diinput di Semester 1 --
+                            -- Input Kode Program, Kegiatan & Sub Kegiatan Baru di Semester 2 --
                           </option>
                           {opdExistingSem1Rows.map((r) => (
                             <option key={r.matrix_id} value={r.matrix_id}>
-                              [{r.kode}] {r.sub_kegiatan} — Kegiatan: {r.kegiatan} (Sem 1:{' '}
+                              [Edit Sem 1: {r.kode}] {r.sub_kegiatan} — Kegiatan: {r.kegiatan} (Sem 1:{' '}
                               {r.sem1.status_verifikasi})
                             </option>
                           ))}
@@ -1671,12 +1868,17 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                           <span className="text-xs font-extrabold text-slate-900">
                             Katalog Nomenklatur SIPD: {targetOpdForSipd.nama_opd}
                           </span>
-                          {isSipdCatalogLocked && (
+                          {isSipdCatalogLocked ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 text-[10.5px] font-extrabold">
                               <Lock className="w-3 h-3 text-amber-700" />
                               Terkunci (Sesuai Semester 1)
                             </span>
-                          )}
+                          ) : selectedSemester === 2 ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-emerald-100 text-emerald-900 border border-emerald-300 text-[10.5px] font-extrabold">
+                              <Sparkles className="w-3 h-3 text-emerald-700" />
+                              Input Sub Kegiatan Baru Semester 2
+                            </span>
+                          ) : null}
                         </div>
                         <span className="text-[11px] font-semibold text-slate-600">
                           Tersedia <strong className="text-[#1D4ED8]">{programOptions.length} Program</strong> ·{' '}
@@ -2053,33 +2255,55 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                                   const isSelected =
                                     subKegiatan === item.nama_sub_kegiatan &&
                                     kodeRekening === item.kode_sub_kegiatan;
+                                  const alreadyInputtedRow = opdExistingSem1Rows.find(
+                                    (r) =>
+                                      (!effectiveRow || r.matrix_id !== effectiveRow.matrix_id) &&
+                                      ((r.kode || '').trim().toLowerCase() ===
+                                        item.kode_sub_kegiatan.trim().toLowerCase() ||
+                                        (r.sub_kegiatan || '').trim().toLowerCase() ===
+                                          item.nama_sub_kegiatan.trim().toLowerCase())
+                                  );
                                   return (
                                     <button
                                       key={`${item.kode_sub_kegiatan}-${item.nama_sub_kegiatan}`}
                                       type="button"
+                                      disabled={Boolean(alreadyInputtedRow)}
                                       onClick={() => {
+                                        if (alreadyInputtedRow) return;
                                         setSubKegiatan(item.nama_sub_kegiatan);
                                         // Sistem otomatis menampilkan Kode Sub Kegiatan yang dipilih
                                         setKodeRekening(item.kode_sub_kegiatan);
                                         setOpenSipdDropdown(null);
                                       }}
-                                      className={`w-full p-2.5 text-left transition-colors flex items-start justify-between gap-3 cursor-pointer ${
-                                        isSelected
-                                          ? 'bg-blue-50 text-[#1E3A8A]'
-                                          : 'hover:bg-blue-50/60 text-slate-800'
+                                      className={`w-full p-2.5 text-left transition-colors flex items-start justify-between gap-3 ${
+                                        alreadyInputtedRow
+                                          ? 'bg-slate-100/90 text-slate-400 cursor-not-allowed'
+                                          : isSelected
+                                          ? 'bg-blue-50 text-[#1E3A8A] cursor-pointer'
+                                          : 'hover:bg-blue-50/60 text-slate-800 cursor-pointer'
                                       }`}
                                     >
                                       <div className="flex items-start gap-2 min-w-0">
-                                        <span className="px-2 py-0.5 rounded-md bg-blue-100 text-[#1D4ED8] font-mono text-xs font-extrabold shrink-0">
+                                        <span
+                                          className={`px-2 py-0.5 rounded-md font-mono text-xs font-extrabold shrink-0 ${
+                                            alreadyInputtedRow
+                                              ? 'bg-slate-200 text-slate-500'
+                                              : 'bg-blue-100 text-[#1D4ED8]'
+                                          }`}
+                                        >
                                           {item.kode_sub_kegiatan}
                                         </span>
                                         <span className="text-xs font-bold leading-snug">
                                           {item.nama_sub_kegiatan}
                                         </span>
                                       </div>
-                                      {isSelected && (
+                                      {alreadyInputtedRow ? (
+                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-100 text-rose-700 border border-rose-200 shrink-0">
+                                          Sudah Diinput (Tidak Boleh Duplikat)
+                                        </span>
+                                      ) : isSelected ? (
                                         <CheckCircle2 className="w-4 h-4 text-[#2563EB] shrink-0 mt-0.5" />
-                                      )}
+                                      ) : null}
                                     </button>
                                   );
                                 })
@@ -2088,6 +2312,33 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                           </div>
                         )}
                       </div>
+
+                      {/* PERINGATAN ANTI-DUPLIKAT JIKA SUB KEGIATAN SUDAH PERNAH DIINPUT */}
+                      {duplicateRowMatch && (
+                        <div className="p-3.5 rounded-2xl bg-rose-50 border-2 border-rose-300 flex items-start gap-3 text-xs text-rose-900">
+                          <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                          <div className="space-y-1 flex-1">
+                            <p className="font-extrabold text-rose-950">
+                              Duplikat Terdeteksi — Sub Kegiatan Ini Sudah Pernah Diinputkan!
+                            </p>
+                            <p className="text-rose-800 leading-relaxed">
+                              Kode Rekening <strong>[{duplicateRowMatch.kode}]</strong> — Sub Kegiatan{' '}
+                              <strong>"{duplicateRowMatch.sub_kegiatan}"</strong> pada Kegiatan{' '}
+                              <strong>"{duplicateRowMatch.kegiatan}"</strong> sudah terdaftar pada matriks instansi ini. Pada pengisian Semester 1 maupun Semester 2 tidak diperbolehkan mengisi duplikat kode program, kegiatan, dan sub kegiatan yang sama.
+                            </p>
+                            {selectedSemester === 2 && (
+                              <button
+                                type="button"
+                                onClick={() => applyExistingRowToForm(duplicateRowMatch)}
+                                className="mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-700 hover:bg-rose-800 text-white text-[11px] font-bold transition-colors cursor-pointer"
+                              >
+                                <span>Buka & Edit Data Sub Kegiatan Ini untuk Semester 2</span>
+                                <ChevronRight className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                       {/* TAHAP 4: SISTEM OTOMATIS MENAMPILKAN KODE SUB KEGIATAN YANG SUDAH DIPILIH */}
                       <div className="pt-2 border-t border-blue-200/60">
@@ -3271,22 +3522,22 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                         <h3 className="text-sm font-bold text-slate-900">
                           {selectedSemester === 1
                             ? `Langkah 4: Realisasi Anggaran Semester 1 (TA ${activePeriode.tahun})`
-                            : `Langkah 4: Realisasi Anggaran Semester 1 & Realisasi Akumulasi/Final (TA ${activePeriode.tahun})`}
+                            : `Langkah 4: Realisasi Anggaran Semester 1, Semester 2 & Realisasi Final (TA ${activePeriode.tahun})`}
                         </h3>
                         <p className="text-xs text-slate-500">
                           {selectedSemester === 1 ? (
                             <>
-                              Menampilkan <strong>Realisasi Semester 1 (Januari – Juni)</strong> beserta rincian realisasi.
+                              Menampilkan <strong>Realisasi Semester 1 (Januari – Juni)</strong> beserta rincian realisasi (diperbolehkan mengisi <strong>&quot;0&quot;</strong>).
                             </>
                           ) : (
                             <>
-                              Karena pilihan awal adalah <strong>Semester 2</strong>, ditampilkan <strong>Realisasi Semester 1 (Januari – Juni)</strong> dan <strong>Realisasi Akumulasi/Final</strong>.
+                              Menampilkan <strong>Realisasi Semester 1 (Januari – Juni)</strong>, pengisian <strong>Realisasi Semester 2 (Juli – Desember)</strong>, serta <strong>Realisasi Final (Penjumlahan Semester 1 + Semester 2)</strong>.
                             </>
                           )}
                         </p>
                       </div>
                       <span className="text-xs font-semibold px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        {selectedSemester === 1 ? 'Mode Semester 1' : 'Mode Semester 1 & Akumulasi/Final'}
+                        {selectedSemester === 1 ? 'Mode Semester 1' : 'Mode Semester 1 & Semester 2'}
                       </span>
                     </div>
 
@@ -3354,9 +3605,14 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
 
                         <div className="space-y-3.5 pt-1">
                           <div>
-                            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                              Nominal Realisasi Semester 1 (Rp) <span className="text-rose-600">*</span>
-                            </label>
+                            <div className="flex items-center justify-between gap-2 mb-1.5">
+                              <label className="block text-xs font-semibold text-slate-700">
+                                Nominal Realisasi Semester 1 (Rp) <span className="text-rose-600">*</span>
+                              </label>
+                              <span className="text-[10.5px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                                Diperbolehkan mengisi &quot;0&quot;
+                              </span>
+                            </div>
                             <div className="relative">
                               <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
                                 Rp
@@ -3365,10 +3621,16 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                                 type="text"
                                 inputMode="numeric"
                                 disabled={isSem1Locked}
-                                value={realisasiSem1 > 0 ? formatNumber(realisasiSem1) : ''}
-                                onChange={(e) =>
-                                  setRealisasiSem1(parseNumericInput(e.target.value))
+                                value={
+                                  realisasiSem1Touched || realisasiSem1 > 0
+                                    ? formatNumber(realisasiSem1)
+                                    : ''
                                 }
+                                onChange={(e) => {
+                                  const raw = e.target.value.trim();
+                                  setRealisasiSem1Touched(raw !== '');
+                                  setRealisasiSem1(parseNumericInput(raw));
+                                }}
                                 placeholder="0"
                                 className={`w-full pl-10 pr-4 py-2.5 text-base font-mono-tabular font-bold rounded-xl border ${
                                   isSem1Locked
@@ -3403,7 +3665,7 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                               disabled={isSem1Locked}
                               value={rincianRealisasiSem1}
                               onChange={(e) => setRincianRealisasiSem1(e.target.value)}
-                              placeholder="Ketik rincian realisasi Semester 1 (misal: Terealisasi penyaluran untuk 125 KPM pada tahap I di 8 kecamatan)..."
+                              placeholder="Ketik rincian realisasi Semester 1 (misal: Terealisasi penyaluran untuk 125 KPM pada tahap I di 8 kecamatan, atau belum ada realisasi)..."
                               className={`w-full px-3.5 py-2 text-xs rounded-xl border leading-relaxed ${
                                 isSem1Locked
                                   ? 'bg-slate-100 text-slate-600 border-slate-200 cursor-not-allowed'
@@ -3432,13 +3694,13 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                         )}
                       </div>
 
-                      {/* PANEL REALISASI AKUMULASI/FINAL (Hanya muncul jika dipilih Semester 2) */}
+                      {/* PANEL REALISASI SEMESTER 2 (Hanya muncul jika dipilih Semester 2) */}
                       {selectedSemester === 2 && (
                         <div className="p-5 rounded-2xl bg-[#F8FAFF] border border-indigo-200/80 space-y-4">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div>
                               <h4 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
-                                <span>Realisasi Akumulasi/Final — TA {activePeriode.tahun}</span>
+                                <span>Realisasi Semester 2 — TA {activePeriode.tahun}</span>
                                 {isSem2Locked && (
                                   <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
                                     <Lock className="w-3 h-3" /> Terkunci
@@ -3446,7 +3708,7 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                                 )}
                               </h4>
                               <p className="text-xs text-slate-500">
-                                Periode Pelaporan: Akumulasi / Final s.d. Desember {activePeriode.tahun}
+                                Periode Pelaporan: Juli – Desember {activePeriode.tahun}
                               </p>
                             </div>
                             <StatusIndicator
@@ -3456,16 +3718,21 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
 
                           {effectiveRow?.sem2.catatan_verifikator && (
                             <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900">
-                              <strong>Catatan Verifikator Realisasi Akumulasi/Final:</strong>{' '}
+                              <strong>Catatan Verifikator Realisasi Semester 2:</strong>{' '}
                               {effectiveRow.sem2.catatan_verifikator}
                             </div>
                           )}
 
                           <div className="space-y-3.5 pt-1">
                             <div>
-                              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                                Nominal Realisasi Akumulasi/Final (Rp) <span className="text-rose-600">*</span>
-                              </label>
+                              <div className="flex items-center justify-between gap-2 mb-1.5">
+                                <label className="block text-xs font-semibold text-slate-700">
+                                  Nominal Realisasi Semester 2 (Rp) <span className="text-rose-600">*</span>
+                                </label>
+                                <span className="text-[10.5px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                                  Diperbolehkan mengisi &quot;0&quot;
+                                </span>
+                              </div>
                               <div className="relative">
                                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
                                   Rp
@@ -3474,10 +3741,16 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                                   type="text"
                                   inputMode="numeric"
                                   disabled={isSem2Locked}
-                                  value={realisasiSem2 > 0 ? formatNumber(realisasiSem2) : ''}
-                                  onChange={(e) =>
-                                    setRealisasiSem2(parseNumericInput(e.target.value))
+                                  value={
+                                    realisasiSem2Touched || realisasiSem2 > 0
+                                      ? formatNumber(realisasiSem2)
+                                      : ''
                                   }
+                                  onChange={(e) => {
+                                    const raw = e.target.value.trim();
+                                    setRealisasiSem2Touched(raw !== '');
+                                    setRealisasiSem2(parseNumericInput(raw));
+                                  }}
                                   placeholder="0"
                                   className={`w-full pl-10 pr-4 py-2.5 text-base font-mono-tabular font-bold rounded-xl border ${
                                     isSem2Locked
@@ -3494,7 +3767,7 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                                   </strong>
                                 </span>
                                 <span className="font-mono-tabular font-bold text-indigo-700">
-                                  Capaian Akumulasi/Final:{' '}
+                                  Capaian S2:{' '}
                                   {effectiveAlokasiForSem2 > 0
                                     ? `${((realisasiSem2 / effectiveAlokasiForSem2) * 100).toFixed(1)}%`
                                     : '0%'}
@@ -3502,17 +3775,17 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                               </div>
                             </div>
 
-                            {/* Kolom Rincian Realisasi Akumulasi/Final */}
+                            {/* Kolom Rincian Realisasi Semester 2 */}
                             <div>
                               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                                Rincian Realisasi Akumulasi/Final
+                                Rincian Realisasi Semester 2
                               </label>
                               <textarea
                                 rows={3}
                                 disabled={isSem2Locked}
                                 value={rincianRealisasiSem2}
                                 onChange={(e) => setRincianRealisasiSem2(e.target.value)}
-                                placeholder="Ketik rincian realisasi akumulasi/final (misal: Penyaluran tahap akhir untuk 250 KPM telah selesai 100% sesuai target)..."
+                                placeholder="Ketik rincian realisasi Semester 2 (misal: Penyaluran tahap II pada Juli-Desember untuk 125 KPM telah selesai dilaksanakan)..."
                                 className={`w-full px-3.5 py-2 text-xs rounded-xl border leading-relaxed ${
                                   isSem2Locked
                                     ? 'bg-slate-100 text-slate-600 border-slate-200 cursor-not-allowed'
@@ -3525,7 +3798,7 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                           {sem2Logs.length > 0 && (
                             <div className="pt-3 border-t border-slate-200/60">
                               <p className="text-xs font-semibold text-slate-600 mb-1.5 flex items-center gap-1.5">
-                                <History className="w-3.5 h-3.5" /> Histori Perubahan Realisasi Akumulasi/Final
+                                <History className="w-3.5 h-3.5" /> Histori Perubahan Realisasi Semester 2
                               </p>
                               <div className="space-y-1.5 max-h-24 overflow-y-auto text-[11px] text-slate-600">
                                 {sem2Logs.slice(0, 3).map((l) => (
@@ -3543,103 +3816,163 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                       )}
                     </div>
 
-                    {/* PERHITUNGAN SISA PAGU ANGGARAN (DIBAWAH REALISASI AKUMULASI/FINAL) */}
+                    {/* REALISASI FINAL (PENJUMLAHAN SEMESTER 1 DAN SEMESTER 2) & PERHITUNGAN SISA PAGU ANGGARAN */}
                     {selectedSemester === 2 && (() => {
                       const paguPerubahanAcuan =
                         showAnggaranPerubahan && alokasiAnggaranPerubahan > 0
                           ? alokasiAnggaranPerubahan
                           : alokasiAnggaran;
-                      const sisaPagu = paguPerubahanAcuan - realisasiSem2;
+                      const realisasiFinal = realisasiSem1 + realisasiSem2;
+                      const capaianFinalPersen =
+                        paguPerubahanAcuan > 0
+                          ? ((realisasiFinal / paguPerubahanAcuan) * 100).toFixed(1)
+                          : '0.0';
+                      const sisaPagu = paguPerubahanAcuan - realisasiFinal;
                       const isNegative = sisaPagu < 0;
 
                       return (
-                        <div
-                          className={`p-5 rounded-2xl border-2 space-y-3.5 ${
-                            isNegative
-                              ? 'bg-rose-50/70 border-rose-200'
-                              : 'bg-emerald-50/60 border-emerald-200/90'
-                          }`}
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-200/70">
-                            <div className="flex items-center gap-2">
-                              <Wallet
-                                className={`w-4 h-4 ${
-                                  isNegative ? 'text-rose-600' : 'text-emerald-600'
-                                }`}
-                              />
-                              <div>
-                                <h4 className="text-xs sm:text-sm font-extrabold text-slate-900">
-                                  Perhitungan Sisa Pagu Anggaran
-                                </h4>
-                                <p className="text-[11px] text-slate-600">
-                                  Rumus:{' '}
-                                  <strong>
-                                    Alokasi Pagu Anggaran Perubahan − Realisasi Akumulasi/Final
-                                  </strong>
+                        <div className="space-y-4">
+                          {/* KOTAK REALISASI FINAL (PENJUMLAHAN SEMESTER 1 + SEMESTER 2) */}
+                          <div className="p-5 rounded-2xl bg-indigo-50/70 border-2 border-indigo-200/90 space-y-3.5">
+                            <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-indigo-200/70">
+                              <div className="flex items-center gap-2">
+                                <Sparkles className="w-4 h-4 text-indigo-600" />
+                                <div>
+                                  <h4 className="text-xs sm:text-sm font-extrabold text-slate-900">
+                                    Realisasi Final — TA {activePeriode.tahun} (Penjumlahan Semester 1 + Semester 2)
+                                  </h4>
+                                  <p className="text-[11px] text-slate-600">
+                                    Rumus Otomatis:{' '}
+                                    <strong>
+                                      Realisasi Semester 1 + Realisasi Semester 2
+                                    </strong>
+                                  </p>
+                                </div>
+                              </div>
+                              <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg border bg-indigo-100 text-indigo-800 border-indigo-200">
+                                Capaian Realisasi Final: {capaianFinalPersen}%
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                              <div className="p-3.5 rounded-xl bg-white border border-indigo-100">
+                                <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                  Realisasi Semester 1 (Jan – Jun)
+                                </span>
+                                <p className="text-sm font-mono-tabular font-bold text-[#2563EB] mt-1">
+                                  {formatRupiah(realisasiSem1)}
                                 </p>
                               </div>
+
+                              <div className="p-3.5 rounded-xl bg-white border border-indigo-100">
+                                <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                  Realisasi Semester 2 (Jul – Des)
+                                </span>
+                                <p className="text-sm font-mono-tabular font-bold text-indigo-700 mt-1">
+                                  + {formatRupiah(realisasiSem2)}
+                                </p>
+                              </div>
+
+                              <div className="p-3.5 rounded-xl bg-indigo-600 text-white border border-indigo-700 shadow-2xs">
+                                <span className="block text-[10px] font-extrabold uppercase tracking-wider text-indigo-100">
+                                  Total Realisasi Final (S1 + S2)
+                                </span>
+                                <p className="text-base font-mono-tabular font-extrabold mt-0.5">
+                                  {formatRupiah(realisasiFinal)}
+                                </p>
+                                <span className="block text-[10px] text-indigo-100 mt-0.5">
+                                  Penjumlahan Semester 1 & Semester 2
+                                </span>
+                              </div>
                             </div>
-                            <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg border bg-indigo-100/80 text-indigo-800 border-indigo-200">
-                              Acuan Pagu: Alokasi Pagu Anggaran Perubahan
-                            </span>
                           </div>
 
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <div className="p-3.5 rounded-xl bg-white border border-slate-200/80">
-                              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                                1. Alokasi Pagu Anggaran Perubahan
+                          {/* PERHITUNGAN SISA PAGU ANGGARAN */}
+                          <div
+                            className={`p-5 rounded-2xl border-2 space-y-3.5 ${
+                              isNegative
+                                ? 'bg-rose-50/70 border-rose-200'
+                                : 'bg-emerald-50/60 border-emerald-200/90'
+                            }`}
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-200/70">
+                              <div className="flex items-center gap-2">
+                                <Wallet
+                                  className={`w-4 h-4 ${
+                                    isNegative ? 'text-rose-600' : 'text-emerald-600'
+                                  }`}
+                                />
+                                <div>
+                                  <h4 className="text-xs sm:text-sm font-extrabold text-slate-900">
+                                    Perhitungan Sisa Pagu Anggaran
+                                  </h4>
+                                  <p className="text-[11px] text-slate-600">
+                                    Rumus:{' '}
+                                    <strong>
+                                      Alokasi Pagu Anggaran Perubahan − Realisasi Final (Semester 1 + Semester 2)
+                                    </strong>
+                                  </p>
+                                </div>
+                              </div>
+                              <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg border bg-indigo-100/80 text-indigo-800 border-indigo-200">
+                                Acuan Pagu: Alokasi Pagu Anggaran Perubahan
                               </span>
-                              <p className="text-sm font-mono-tabular font-extrabold text-slate-900 mt-1">
-                                {formatRupiah(paguPerubahanAcuan)}
-                              </p>
-                              {!(showAnggaranPerubahan && alokasiAnggaranPerubahan > 0) && (
-                                <span className="block text-[10px] text-slate-500 mt-0.5">
-                                  (Menggunakan Pagu Murni karena Perubahan belum diisi)
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                              <div className="p-3.5 rounded-xl bg-white border border-slate-200/80">
+                                <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                  1. Alokasi Pagu Anggaran Perubahan
                                 </span>
-                              )}
-                            </div>
+                                <p className="text-sm font-mono-tabular font-extrabold text-slate-900 mt-1">
+                                  {formatRupiah(paguPerubahanAcuan)}
+                                </p>
+                                {!(showAnggaranPerubahan && alokasiAnggaranPerubahan > 0) && (
+                                  <span className="block text-[10px] text-slate-500 mt-0.5">
+                                    (Menggunakan Pagu Murni karena Perubahan belum diisi)
+                                  </span>
+                                )}
+                              </div>
 
-                            <div className="p-3.5 rounded-xl bg-white border border-slate-200/80">
-                              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                                2. Pengurang Realisasi Akumulasi/Final
-                              </span>
-                              <p className="text-sm font-mono-tabular font-bold text-indigo-700 mt-1">
-                                − {formatRupiah(realisasiSem2)}
-                              </p>
-                              <span className="block text-[10px] text-slate-500 mt-0.5">
-                                Capaian Akumulasi/Final:{' '}
-                                {paguPerubahanAcuan > 0
-                                  ? `${((realisasiSem2 / paguPerubahanAcuan) * 100).toFixed(1)}%`
-                                  : '0%'}
-                              </span>
-                            </div>
+                              <div className="p-3.5 rounded-xl bg-white border border-slate-200/80">
+                                <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                  2. Pengurang Realisasi Final (S1 + S2)
+                                </span>
+                                <p className="text-sm font-mono-tabular font-bold text-indigo-700 mt-1">
+                                  − {formatRupiah(realisasiFinal)}
+                                </p>
+                                <span className="block text-[10px] text-slate-500 mt-0.5">
+                                  Sem 1 ({formatRupiah(realisasiSem1)}) + Sem 2 ({formatRupiah(realisasiSem2)})
+                                </span>
+                              </div>
 
-                            <div
-                              className={`p-3.5 rounded-xl border ${
-                                isNegative
-                                  ? 'bg-rose-100/80 border-rose-300'
-                                  : 'bg-emerald-100/70 border-emerald-300'
-                              }`}
-                            >
-                              <span
-                                className={`block text-[10px] font-extrabold uppercase tracking-wider ${
-                                  isNegative ? 'text-rose-800' : 'text-emerald-800'
+                              <div
+                                className={`p-3.5 rounded-xl border ${
+                                  isNegative
+                                    ? 'bg-rose-100/80 border-rose-300'
+                                    : 'bg-emerald-100/70 border-emerald-300'
                                 }`}
                               >
-                                Sisa Pagu Anggaran
-                              </span>
-                              <p
-                                className={`text-base font-mono-tabular font-extrabold mt-0.5 ${
-                                  isNegative ? 'text-rose-700' : 'text-emerald-900'
-                                }`}
-                              >
-                                {sisaPagu < 0
-                                  ? `- ${formatRupiah(Math.abs(sisaPagu))}`
-                                  : formatRupiah(sisaPagu)}
-                              </p>
-                              <span className="block text-[10px] font-semibold text-slate-600 mt-0.5">
-                                Alokasi Pagu Anggaran Perubahan − Realisasi Akumulasi/Final
-                              </span>
+                                <span
+                                  className={`block text-[10px] font-extrabold uppercase tracking-wider ${
+                                    isNegative ? 'text-rose-800' : 'text-emerald-800'
+                                  }`}
+                                >
+                                  Sisa Pagu Anggaran
+                                </span>
+                                <p
+                                  className={`text-base font-mono-tabular font-extrabold mt-0.5 ${
+                                    isNegative ? 'text-rose-700' : 'text-emerald-900'
+                                  }`}
+                                >
+                                  {sisaPagu < 0
+                                    ? `- ${formatRupiah(Math.abs(sisaPagu))}`
+                                    : formatRupiah(sisaPagu)}
+                                </p>
+                                <span className="block text-[10px] font-semibold text-slate-600 mt-0.5">
+                                  Alokasi Pagu Anggaran Perubahan − Realisasi Final
+                                </span>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -3668,7 +4001,12 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setCurrentStep((prev) => (prev + 1) as 1 | 2 | 3 | 4)}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-[#2563EB] bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-colors cursor-pointer"
+                    disabled={Boolean(duplicateRowMatch)}
+                    className={`inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-xl transition-colors ${
+                      duplicateRowMatch
+                        ? 'text-slate-400 bg-slate-100 border border-slate-200 cursor-not-allowed'
+                        : 'text-[#2563EB] bg-blue-50 border border-blue-200 hover:bg-blue-100 cursor-pointer'
+                    }`}
                   >
                     <span>Langkah Selanjutnya</span>
                     <ChevronRight className="w-4 h-4" />
@@ -3677,6 +4015,11 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
               </div>
 
               <div className="flex flex-wrap items-center gap-2.5">
+                {duplicateRowMatch && (
+                  <span className="text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl">
+                    Duplikat Sub Kegiatan — Pilih Sub Kegiatan Lain
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={() => {
@@ -3696,6 +4039,7 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                   <>
                     <button
                       type="button"
+                      disabled={Boolean(duplicateRowMatch)}
                       onClick={() =>
                         triggerSave(
                           selectedSemester === 1
@@ -3707,7 +4051,11 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                           true
                         )
                       }
-                      className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold text-[#1D4ED8] bg-white border border-blue-200 rounded-xl hover:bg-blue-50 transition-colors cursor-pointer"
+                      className={`inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold rounded-xl transition-colors ${
+                        duplicateRowMatch
+                          ? 'text-slate-400 bg-slate-100 border border-slate-200 cursor-not-allowed'
+                          : 'text-[#1D4ED8] bg-white border border-blue-200 hover:bg-blue-50 cursor-pointer'
+                      }`}
                     >
                       <Save className="w-4 h-4" />
                       <span>
@@ -3718,6 +4066,7 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                     </button>
                     <button
                       type="button"
+                      disabled={Boolean(duplicateRowMatch)}
                       onClick={() =>
                         triggerSave(
                           selectedSemester === 1
@@ -3731,7 +4080,11 @@ export const MatrixInputModal: React.FC<MatrixInputModalProps> = ({
                           true
                         )
                       }
-                      className="inline-flex items-center gap-1.5 px-5 py-2.5 text-xs font-semibold text-white bg-gradient-to-r from-[#2563EB] to-[#1D4ED8] hover:from-[#1D4ED8] hover:to-[#1E40AF] rounded-xl shadow-[0_6px_16px_-4px_rgba(37,99,235,0.45)] transition-all cursor-pointer"
+                      className={`inline-flex items-center gap-1.5 px-5 py-2.5 text-xs font-semibold rounded-xl transition-all ${
+                        duplicateRowMatch
+                          ? 'text-slate-400 bg-slate-200 cursor-not-allowed'
+                          : 'text-white bg-gradient-to-r from-[#2563EB] to-[#1D4ED8] hover:from-[#1D4ED8] hover:to-[#1E40AF] shadow-[0_6px_16px_-4px_rgba(37,99,235,0.45)] cursor-pointer'
+                      }`}
                     >
                       <Send className="w-4 h-4" />
                       <span>Simpan & Kirim Verifikasi Semester {selectedSemester}</span>

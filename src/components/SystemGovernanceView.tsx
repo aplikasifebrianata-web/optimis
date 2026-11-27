@@ -89,9 +89,9 @@ function analyzeRowHistory(row: EnrichedMatrixRow): RowHistoryAnalysis {
 
   const realisasiSem1 = Number(row.sem1?.realisasi) || 0;
   const realisasiSem2 = Number(row.sem2?.realisasi) || 0;
-  const totalRealisasi = realisasiSem2;
-  const sisaPagu = paguAcuan - realisasiSem2;
-  const persenRealisasiTotal = paguAcuan > 0 ? (realisasiSem2 / paguAcuan) * 100 : 0;
+  const totalRealisasi = realisasiSem1 + realisasiSem2;
+  const sisaPagu = paguAcuan - totalRealisasi;
+  const persenRealisasiTotal = paguAcuan > 0 ? (totalRealisasi / paguAcuan) * 100 : 0;
 
   const sem1Langsung = (row.aktivitas_real_langsung || '').trim();
   const sem1TidakLangsung = (row.aktivitas_real_tidak_langsung || '').trim();
@@ -1344,15 +1344,15 @@ export const SystemGovernanceView: React.FC<SystemGovernanceViewProps> = ({
                         )}
                       </div>
 
-                      {/* Realisasi Akumulasi/Final */}
+                      {/* Realisasi Semester 2 */}
                       <div className="p-4 rounded-2xl bg-[#F8FAFF] border border-indigo-200/80 space-y-2.5">
                         <div className="flex items-center justify-between gap-2">
                           <div>
                             <h4 className="text-xs font-extrabold text-slate-900">
-                              Realisasi Akumulasi/Final — TA {activePeriode.tahun}
+                              Realisasi Semester 2 — TA {activePeriode.tahun}
                             </h4>
                             <p className="text-[11px] text-slate-500">
-                              Terhadap Alokasi Pagu Anggaran Perubahan ({formatRupiah(selectedAnalysis.paguAcuan)})
+                              Periode Juli – Desember ({formatRupiah(selectedAnalysis.paguAcuan)})
                             </p>
                           </div>
                           <StatusIndicator status={selectedAnalysis.row.sem2.status_verifikasi} />
@@ -1363,7 +1363,7 @@ export const SystemGovernanceView: React.FC<SystemGovernanceViewProps> = ({
                             {formatRupiah(selectedAnalysis.realisasiSem2)}
                           </p>
                           <span className="text-xs font-mono-tabular font-bold text-slate-700">
-                            Capaian Akumulasi/Final:{' '}
+                            Capaian Sem 2:{' '}
                             {selectedAnalysis.paguAcuan > 0
                               ? `${(
                                   (selectedAnalysis.realisasiSem2 / selectedAnalysis.paguAcuan) *
@@ -1375,20 +1375,75 @@ export const SystemGovernanceView: React.FC<SystemGovernanceViewProps> = ({
 
                         <div className="p-3 rounded-xl bg-white border border-slate-200/80 space-y-1">
                           <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                            Rincian Realisasi Akumulasi/Final
+                            Rincian Realisasi Semester 2
                           </span>
                           <p className="text-xs text-slate-700 whitespace-pre-line">
                             {selectedAnalysis.row.sem2.rincian_realisasi ||
-                              'Belum ada keterangan rincian realisasi akumulasi/final.'}
+                              'Belum ada keterangan rincian realisasi Semester 2.'}
                           </p>
                         </div>
 
                         {selectedAnalysis.row.sem2.catatan_verifikator && (
                           <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
-                            <strong>Catatan Verifikator Realisasi Akumulasi/Final:</strong>{' '}
+                            <strong>Catatan Verifikator Realisasi Sem 2:</strong>{' '}
                             {selectedAnalysis.row.sem2.catatan_verifikator}
                           </p>
                         )}
+                      </div>
+                    </div>
+
+                    {/* REALISASI FINAL (PENJUMLAHAN SEMESTER 1 + SEMESTER 2) */}
+                    <div className="p-5 rounded-2xl bg-indigo-50/70 border-2 border-indigo-200/90 space-y-3.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-indigo-200/70">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="w-4 h-4 text-indigo-600" />
+                          <div>
+                            <h4 className="text-xs sm:text-sm font-extrabold text-slate-900">
+                              Realisasi Final — TA {activePeriode.tahun} (Penjumlahan Semester 1 + Semester 2)
+                            </h4>
+                            <p className="text-[11px] text-slate-600">
+                              Rumus:{' '}
+                              <strong>
+                                Realisasi Semester 1 + Realisasi Semester 2
+                              </strong>
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg border bg-indigo-100 text-indigo-800 border-indigo-200">
+                          Capaian Realisasi Final: {selectedAnalysis.persenRealisasiTotal.toFixed(1)}%
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="p-3.5 rounded-xl bg-white border border-indigo-100">
+                          <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                            Realisasi Semester 1 (Jan – Jun)
+                          </span>
+                          <p className="text-sm font-mono-tabular font-bold text-[#2563EB] mt-1">
+                            {formatRupiah(selectedAnalysis.realisasiSem1)}
+                          </p>
+                        </div>
+
+                        <div className="p-3.5 rounded-xl bg-white border border-indigo-100">
+                          <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                            Realisasi Semester 2 (Jul – Des)
+                          </span>
+                          <p className="text-sm font-mono-tabular font-bold text-indigo-700 mt-1">
+                            + {formatRupiah(selectedAnalysis.realisasiSem2)}
+                          </p>
+                        </div>
+
+                        <div className="p-3.5 rounded-xl bg-indigo-600 text-white border border-indigo-700">
+                          <span className="block text-[10px] font-extrabold uppercase tracking-wider text-indigo-100">
+                            Total Realisasi Final (S1 + S2)
+                          </span>
+                          <p className="text-base font-mono-tabular font-extrabold mt-0.5">
+                            {formatRupiah(selectedAnalysis.totalRealisasi)}
+                          </p>
+                          <span className="block text-[10px] text-indigo-100 mt-0.5">
+                            Penjumlahan Semester 1 & Semester 2
+                          </span>
+                        </div>
                       </div>
                     </div>
 
@@ -1416,7 +1471,7 @@ export const SystemGovernanceView: React.FC<SystemGovernanceViewProps> = ({
                             <p className="text-[11px] text-slate-600">
                               Rumus:{' '}
                               <strong>
-                                Alokasi Pagu Anggaran Perubahan − Realisasi Akumulasi/Final
+                                Alokasi Pagu Anggaran Perubahan − Realisasi Final (Semester 1 + Semester 2)
                               </strong>
                             </p>
                           </div>
@@ -1443,14 +1498,13 @@ export const SystemGovernanceView: React.FC<SystemGovernanceViewProps> = ({
 
                         <div className="p-3.5 rounded-xl bg-white border border-slate-200/80">
                           <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                            2. Pengurang Realisasi Akumulasi/Final
+                            2. Pengurang Realisasi Final (S1 + S2)
                           </span>
                           <p className="text-sm font-mono-tabular font-bold text-indigo-700 mt-1">
-                            − {formatRupiah(selectedAnalysis.realisasiSem2)}
+                            − {formatRupiah(selectedAnalysis.totalRealisasi)}
                           </p>
                           <span className="block text-[10px] text-slate-500 mt-0.5">
-                            Capaian Akumulasi/Final:{' '}
-                            {selectedAnalysis.persenRealisasiTotal.toFixed(1)}%
+                            Sem 1 ({formatRupiah(selectedAnalysis.realisasiSem1)}) + Sem 2 ({formatRupiah(selectedAnalysis.realisasiSem2)})
                           </span>
                         </div>
 
@@ -1482,7 +1536,7 @@ export const SystemGovernanceView: React.FC<SystemGovernanceViewProps> = ({
                               : formatRupiah(selectedAnalysis.sisaPagu)}
                           </p>
                           <span className="block text-[10px] font-semibold text-slate-600 mt-0.5">
-                            Alokasi Pagu Anggaran Perubahan − Realisasi Akumulasi/Final
+                            Alokasi Pagu Anggaran Perubahan − Realisasi Final
                           </span>
                         </div>
                       </div>

@@ -1993,7 +1993,15 @@ export class DatabaseService {
         filledScore += 1;
       }
       if (m.besaran_manfaat.trim() && m.jenis_bantuan.trim()) filledScore += 1;
-      if (sem1.realisasi > 0 || sem2.realisasi > 0 || sem1.status_verifikasi === 'Terverifikasi') filledScore += 1;
+      if (
+        sem1.realisasi >= 0 &&
+        (sem1.status_verifikasi !== 'Belum Diisi' ||
+          sem2.status_verifikasi !== 'Belum Diisi' ||
+          sem1.realisasi > 0 ||
+          sem2.realisasi > 0)
+      ) {
+        filledScore += 1;
+      }
 
       const completion_percentage = Math.round((filledScore / 8) * 100);
 
